@@ -8,13 +8,16 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
     QSplitter,
+    QFileDialog,
     QMessageBox,
     QDialog,
 )
-from PySide6.QtCore import Qt, Signal, QEvent
+from PySide6.QtCore import Qt, Signal, QEvent, QTimer
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QIcon
 import os
 import shutil
+
+import paramiko
 from src.config.settings import Settings
 from src.utils.helper import get_path
 from src.utils.logging_signal import logger
@@ -25,6 +28,7 @@ from typing import Optional
 
 class MainWindow(QWidget):
     file_dropped = Signal(str, str)  # Source path, dest_type
+    refresh_pi_list = Signal()  # Signal to refresh Pi folder list
 
     def __init__(self) -> None:
         super().__init__()
@@ -39,9 +43,11 @@ class MainWindow(QWidget):
         self.stop_btn: QPushButton = QPushButton(" Stop Monitoring")
         self.stop_btn.setEnabled(False)
         self.settings_btn: QPushButton = QPushButton("⚙️")
+        self.refresh_btn: QPushButton = QPushButton("↻")
 
         navbar_layout.addWidget(self.start_btn)
         navbar_layout.addWidget(self.stop_btn)
+        navbar_layout.addWidget(self.refresh_btn)
         navbar_layout.addWidget(self.settings_btn)
         navbar_layout.addStretch()  # Push buttons to the left
         navbar_layout.setContentsMargins(10, 5, 10, 5)  # Add padding
@@ -60,48 +66,7 @@ class MainWindow(QWidget):
         # Splitter for two columns
         splitter: QSplitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Left Column: MacBook Folder
-        left_widget: QWidget = QWidget()
-        left_layout: QVBoxLayout = QVBoxLayout()
-        self.macbook_list: QListWidget = QListWidget()
-        self.macbook_list.setAcceptDrops(True)  # Enable drop
-
-        left_layout.addWidget(QLabel("MacBook Folder"))
-        left_layout.addWidget(self.macbook_list)
-        left_widget.setLayout(left_layout)
-
-        # Right Column: Pi Folder
-        right_widget: QWidget = QWidget()
-        right_layout: QVBoxLayout = QVBoxLayout()
-        self.pi_list: QListWidget = QListWidget()  # Ensure pi_list is defined here
-        self.pi_list.setAcceptDrops(True)
-        self.pi_list.addItems([])  # Initialize with empty list
-        right_layout.addWidget(QLabel("Pi Folder"))
-        right_layout.addWidget(self.pi_list)
-        right_widget.setLayout(right_layout)
-
-        # Add widgets to splitter
-        splitter.addWidget(left_widget)
-        splitter.addWidget(right_widget)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 1)
-        main_layout.addWidget(splitter)
-
-        # Log Box
-        self.log_box: QTextEdit = QTextEdit()
-        self.log_box.setReadOnly(True)
-        main_layout.addWidget(self.log_box)
-
-        self.setLayout(main_layout)
-        self.start_btn.clicked.connect(self.start_monitor)
-        self.stop_btn.clicked.connect(self.stop_monitor)
-        self.settings_btn.clicked.connect(self.open_settings)
-        logger.log_signal.connect(self.log)  # Connect to logger's signal
-        self.installEventFilter(self)  # Install event filter on MainWindow
-        self.monitor_thread: Optional[MonitorThread] = None
-
         self.settings: Settings = Settings()
-
         # Checking on settings.
         if not self.settings.is_valid():
             QMessageBox.warning(
@@ -124,11 +89,127 @@ class MainWindow(QWidget):
                 self.close()
                 return
 
+        # Left Column: Watch Directory
+        left_widget: QWidget = QWidget()
+        left_layout: QVBoxLayout = QVBoxLayout()
+        self.watch_dir_list: QListWidget = QListWidget()
+        self.watch_dir_list.setAcceptDrops(True)  # Enable drop
+        self.watch_dir_list.itemDoubleClicked.connect(self.open_file_explorer)
+        self.update_watch_dir_list()
+        left_layout.addWidget(QLabel("Watch Directory:"))
+        left_layout.addWidget(self.watch_dir_list)
+        left_widget.setLayout(left_layout)
+
+        # Right Column: Pi Folder
+        right_widget: QWidget = QWidget()
+        right_layout: QVBoxLayout = QVBoxLayout()
+        self.pi_list: QListWidget = QListWidget()
+        self.pi_list.setAcceptDrops(True)
+        self.pi_list.itemDoubleClicked.connect(self.open_pi_explorer)
+        self.update_pi_list()
+        right_layout.addWidget(QLabel("Pi Folder:"))
+        right_layout.addWidget(self.pi_list)
+        right_widget.setLayout(right_layout)
+
+        # Add widgets to splitter
+        splitter.addWidget(left_widget)
+        splitter.addWidget(right_widget)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+        main_layout.addWidget(splitter)
+
+        # Log Box
+        self.log_box: QTextEdit = QTextEdit()
+        self.log_box.setReadOnly(True)
+        main_layout.addWidget(self.log_box)
+
+        self.setLayout(main_layout)
+        self.start_btn.clicked.connect(self.start_monitor)
+        self.stop_btn.clicked.connect(self.stop_monitor)
+        self.settings_btn.clicked.connect(self.open_settings)
+        self.refresh_btn.clicked.connect(self.refresh_lists)
+        logger.log_signal.connect(self.log)  # Connect to logger's signal
+        self.installEventFilter(self)  # Install event filter on MainWindow
+        self.monitor_thread: Optional[MonitorThread] = None
+
+        self.refresh_pi_list.connect(self.update_pi_list)
+
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.timeout.connect(self.update_watch_dir_list)
+        self.refresh_timer.start(5000)
+
         self.check_pi_connection(
             pi_user=self.settings.pi_user, pi_ip=self.settings.pi_ip
         )
 
-        self.macbook_list.addItems(self._scan_folder(self.settings.watch_dir) or [""])
+    def update_watch_dir_list(self) -> None:
+        """Update the MacBook folder list with watch directory contents."""
+        watch_dir = self.settings.watch_dir
+        if os.path.exists(watch_dir):
+            self.watch_dir_list.clear()
+            files = [
+                f
+                for f in os.listdir(watch_dir)
+                if os.path.isfile(os.path.join(watch_dir, f))
+            ]
+            self.watch_dir_list.addItems(files)
+        else:
+            self.watch_dir_list.clear()
+            self.watch_dir_list.addItem("Watch directory not found")
+
+    def update_pi_list(self) -> None:
+        """Update the Pi folder list with contents from pi_movies and pi_tv."""
+        self.pi_list.clear()
+        if not all(
+            [
+                self.settings.pi_user,
+                self.settings.pi_ip,
+                self.settings.pi_movies,
+                self.settings.pi_tv,
+            ]
+        ):
+            self.pi_list.addItem("Pi settings not configured")
+            return
+
+        try:
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(self.settings.pi_ip, username=self.settings.pi_user)
+            sftp = ssh.open_sftp()
+
+            for path in [self.settings.pi_movies, self.settings.pi_tv]:
+                try:
+                    files = sftp.listdir(path)
+                    for file in files:
+                        self.pi_list.addItem(f"{path}/{file}")
+                except IOError as e:
+                    logger.log_signal.emit(f"Error accessing {path} on Pi: {e}")
+
+            sftp.close()
+            ssh.close()
+        except Exception as e:
+            self.pi_list.addItem(f"Connection error: {e}")
+            logger.log_signal.emit(f"Failed to connect to Pi: {e}")
+
+    def refresh_lists(self) -> None:
+        """Refresh both MacBook and Pi lists."""
+        self.update_watch_dir_list()
+        self.update_pi_list()
+
+    def open_file_explorer(self, item) -> None:
+        """Open the file explorer for the selected MacBook file."""
+        file_path = os.path.join(self.settings.watch_dir, item.text())
+        if os.path.exists(file_path):
+            QFileDialog.getOpenFileName(self, "Open File", file_path)
+
+    def open_pi_explorer(self, item) -> None:
+        """Open a dialog to simulate exploring the Pi file (read-only for now)."""
+        file_path = item.text()
+        QMessageBox.information(
+            self,
+            "Pi File",
+            f"Viewing: {file_path}\n(SSH access required for full exploration)",
+        )
 
     def _scan_folder(self, path: str) -> list[str]:
         """Scan folder for files and return a list of names."""
@@ -152,15 +233,14 @@ class MainWindow(QWidget):
             self.settings.pi_movies,
             self.settings.pi_tv,
             self.settings.file_exts,
-            self,  # Pass self to connect signal
+            self,
         )
         self.monitor_thread.log_signal.connect(self.log)
-        self.file_dropped.connect(
-            self.monitor_thread.handle_dropped_file
-        )  # Connect here
+        self.file_dropped.connect(self.monitor_thread.handle_dropped_file)
         self.monitor_thread.start()
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
+        self.refresh_pi_list.connect(self.monitor_thread.refresh_pi_list)
 
     def stop_monitor(self) -> None:
         if self.monitor_thread:
@@ -174,16 +254,16 @@ class MainWindow(QWidget):
     def open_settings(self) -> None:
         settings_window = SettingsWindow(self.settings)
         if settings_window.exec() == QDialog.accepted:
-            self.macbook_list.clear()
-            self.macbook_list.addItems(self._scan_folder(self.settings.watch_dir))
+            self.update_watch_dir_list()  # Refresh MacBook list after settings change
+            self.refresh_pi_list.emit()  # Refresh Pi list after settings change
 
     def eventFilter(self, obj: object, event: QEvent) -> bool:
-        if obj == self.macbook_list and event.type() == QEvent.Type.DragEnter:
+        if obj == self.watch_dir_list and event.type() == QEvent.Type.DragEnter:
             event: QDragEnterEvent = event
             if event.mimeData().hasUrls():
                 event.accept()
                 return True
-        elif obj == self.macbook_list and event.type() == QEvent.Type.Drop:
+        elif obj == self.watch_dir_list and event.type() == QEvent.Type.Drop:
             event: QDropEvent = event
             for url in event.mimeData().urls():
                 file_path = url.toLocalFile()
@@ -192,13 +272,10 @@ class MainWindow(QWidget):
                         self.settings.watch_dir, os.path.basename(file_path)
                     )
                     try:
-                        shutil.copy2(file_path, dest_path)  # Copy file to watch_dir
-                        self.macbook_list.clear()
-                        self.macbook_list.addItems(
-                            self._scan_folder(self.settings.watch_dir)
-                        )
+                        shutil.copy2(file_path, dest_path)
+                        self.update_watch_dir_list()
                         logger.log_signal.emit(
-                            f"✅ Added {os.path.basename(file_path)} to MacBook Folder"
+                            f"✅ Added {os.path.basename(file_path)} to Watch Directory"
                         )
                     except Exception as e:
                         logger.log_signal.emit(
@@ -215,7 +292,7 @@ class MainWindow(QWidget):
             for url in event.mimeData().urls():
                 file_path = url.toLocalFile()
                 if os.path.isfile(file_path):
-                    self.file_dropped.emit(file_path, "movie")  # Default to movie
+                    self.file_dropped.emit(file_path, "movie")
             return True
         return super().eventFilter(obj, event)
 

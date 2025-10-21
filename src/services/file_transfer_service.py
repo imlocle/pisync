@@ -2,7 +2,7 @@ import os
 import subprocess
 import sys
 import re
-from typing import Optional, Set
+from typing import List, Optional, Set
 from src.utils.constants import MOVIES_DIR, TV_SHOWS_DIR
 from src.utils.logging_signal import logger  # Import logger instance
 
@@ -81,6 +81,28 @@ class FileTransferService:
         cmd = ["ssh", f"{self.pi_user}@{self.pi_host}", f'ls "{remote_path}"']
         result = subprocess.run(cmd, capture_output=True, text=True)
         return result.returncode == 0
+
+    def list_pi_files(self) -> List[str]:
+        """List files from pi_movies and pi_tv directories on the Pi."""
+        pi_files = []
+        for directory in [self.pi_movies, self.pi_tv]:
+            cmd = ["ssh", f"{self.pi_user}@{self.pi_host}", f'ls "{directory}"']
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                files = result.stdout.strip().split("\n")
+                # Filter by file extensions if specified
+                if self.file_exts:
+                    files = [
+                        f
+                        for f in files
+                        if any(f.endswith(ext) for ext in self.file_exts)
+                    ]
+                pi_files.extend([f"{directory}/{file}" for file in files if file])
+            else:
+                logger.log_signal.emit(
+                    f"❌ Failed to list files in {directory}: {result.stderr}"
+                )
+        return pi_files
 
     def transfer_file(self, file_path: str, dest_type: str) -> bool:
         """

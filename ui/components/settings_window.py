@@ -16,7 +16,7 @@ from src.utils.logging_signal import logger
 
 
 class SettingsWindow(QDialog):
-    """Settings dialog – now also displays the last-modified date of the config file."""
+    """Settings dialog - now also displays the last-modified date of the config file."""
 
     def __init__(self, settings: Settings):
         super().__init__()
@@ -41,6 +41,16 @@ class SettingsWindow(QDialog):
         self.pi_movies_input = QLineEdit(settings.pi_movies)
         self.pi_tv_input = QLineEdit(settings.pi_tv)
         self.watch_dir_input = QLineEdit(settings.watch_dir)
+
+        # Set minimum width for text inputs (e.g., 300 pixels)
+        for input_field in [
+            self.pi_user_input,
+            self.pi_ip_input,
+            self.pi_movies_input,
+            self.pi_tv_input,
+            self.watch_dir_input,
+        ]:
+            input_field.setMinimumWidth(300)
 
         form.addRow("Pi User:", self.pi_user_input)
         form.addRow("Pi IP:", self.pi_ip_input)

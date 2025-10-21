@@ -8,6 +8,7 @@ from typing import Set
 
 class MonitorThread(QThread):
     log_signal = Signal(str)
+    file_processed = Signal(str, str)
 
     def __init__(
         self,
@@ -21,7 +22,14 @@ class MonitorThread(QThread):
     ) -> None:
         super().__init__()
         self.watch_dir: str = watch_dir
+        self.main_window = main_window
+        self.pi_user = pi_user
+        self.pi_ip = pi_ip
+        self.pi_movies = pi_movies
+        self.pi_tv = pi_tv
+        self.file_exts = file_exts
         self._running: bool = True
+
         # Initialize your existing services
         classifier: FileClassifierService = FileClassifierService()
         deletion: FileDeletionService = FileDeletionService()
@@ -39,7 +47,6 @@ class MonitorThread(QThread):
             deletion_service=deletion,
             file_exts=file_exts,
         )
-        self.main_window = main_window
 
     def run(self) -> None:
         self.log_signal.emit(f"📡 Starting Directory Monitor: {self.watch_dir}")
@@ -58,3 +65,22 @@ class MonitorThread(QThread):
             self.log_signal.emit(f"✅ Transferred {file_path} to Pi.")
         else:
             self.log_signal.emit(f"❌ Failed to transfer {file_path} to Pi.")
+
+    def refresh_pi_list(self) -> None:
+        """Refresh the Pi folder list with current contents from pi_movies and pi_tv."""
+        if not all([self.pi_user, self.pi_ip, self.pi_movies, self.pi_tv]):
+            self.log_signal.emit("Pi settings not configured, skipping refresh.")
+            return
+
+        try:
+            # Assume FileTransferService has a method to list Pi files (e.g., via SSH/SFTP)
+            pi_files = self.file_monitor_repo.transfer_service.list_pi_files()
+            if pi_files:
+                # Emit signal to update MainWindow's pi_list
+                if hasattr(self.main_window, "refresh_pi_list"):
+                    self.main_window.refresh_pi_list.emit()  # Trigger UI update
+                self.log_signal.emit("Pi folder list refreshed.")
+            else:
+                self.log_signal.emit("No files found on Pi.")
+        except Exception as e:
+            self.log_signal.emit(f"Failed to refresh Pi list: {e}")
