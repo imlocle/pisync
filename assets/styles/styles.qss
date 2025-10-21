@@ -1,0 +1,32 @@
+QWidget {
+    background-color: #1e1e1e;
+    color: #f0f0f0;
+    font-family: "Arial", sans-serif;
+    font-size: 14px;
+}
+QPushButton {
+    background-color: #2d2d2d;
+    border: 1px solid #3a3a3a;
+    padding: 8px 16px;
+    border-radius: 8px;
+}
+QPushButton:hover {
+    background-color: #3a3a3a;
+}
+QPushButton:disabled {
+    background-color: #444;
+    color: #888;
+}
+QTextEdit {
+    background-color: #121212;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 8px;
+}
+
+/* QHBoxLayout#navbar_layout {
+    background-color: #252525;
+    border-bottom: 1px solid #3a3a3a;
+    padding: 5px 10px;
+    spacing: 10px;
+} */
