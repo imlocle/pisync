@@ -12,7 +12,7 @@ class SettingsConfig(BaseModel):
     pi_movies: str = ""
     pi_tv: str = ""
     file_exts: set[str] = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".srt"}
-    skip_files: set[str] = {".DS_Store"}
+    skip_files: set[str] = {".DS_Store", "Thumbs.db"}
     watch_dir: str = os.path.expanduser("~/Transfers")
 
     @classmethod

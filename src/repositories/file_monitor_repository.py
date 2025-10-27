@@ -1,110 +1,106 @@
 import os
-from typing import Optional, Set
+from typing import Set
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
 from src.services.file_classifier_service import FileClassifierService
 from src.services.file_deletion_service import FileDeletionService
-from src.services.file_transfer_service import FileTransferService
+from src.services.movie_service import MovieService
+from src.services.tv_service import TvService
 from src.utils.constants import MOVIES_DIR, TV_SHOWS_DIR
 
 
 class FileMonitorRepository(FileSystemEventHandler):
     def __init__(
         self,
-        watch_dir,
+        watch_dir: str,
         classifier_service: FileClassifierService,
-        transfer_service: FileTransferService,
+        movie_service: MovieService,
+        tv_service: TvService,
         deletion_service: FileDeletionService,
         file_exts: Set[str],
-    ):
+    ) -> None:
+        super().__init__()
         self.watch_dir = watch_dir
         self.classifier_service = classifier_service
-        self.transfer_service = transfer_service
+        self.movie_service = movie_service
+        self.tv_service = tv_service
         self.deletion_service = deletion_service
         self.file_exts = file_exts
         self.observer = Observer()
 
-    def create_directories(self):
-        """Ensure watch directory and subfolders exist."""
-        movies_dir: str = os.path.join(self.watch_dir, MOVIES_DIR)
-        tv_dir: str = os.path.join(self.watch_dir, TV_SHOWS_DIR)
+    def create_directories(self) -> None:
+        movies_dir = os.path.join(self.watch_dir, MOVIES_DIR)
+        tv_dir = os.path.join(self.watch_dir, TV_SHOWS_DIR)
         for directory in [self.watch_dir, movies_dir, tv_dir]:
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-                print(f"Created directory: {directory}")
+            os.makedirs(directory, exist_ok=True)
 
-    def start_monitoring(self):
-        """Start monitoring the watch directory."""
+    def start_monitoring(self) -> None:
         self.observer.schedule(self, self.watch_dir, recursive=True)
         self.observer.start()
 
-    def stop_monitoring(self):
-        """Stop monitoring the watch directory."""
+    def stop_monitoring(self) -> None:
         self.observer.stop()
         self.observer.join()
 
-    def on_created(self, event: FileSystemEvent):
-        """Handle file/folder creation events."""
+    def on_created(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             self.handle_folder(event.src_path)
         else:
             self.handle_file(event.src_path)
 
-    def on_modified(self, event: FileSystemEvent):
-        """Handle file modification events."""
+    def on_modified(self, event: FileSystemEvent) -> None:
         if not event.is_directory:
             self.handle_file(event.src_path)
 
-    def handle_file(self, file_path: str):
-        """Process a single file event (for TV shows or loose movie files)."""
-        file_name: str = os.path.basename(file_path)
-        if file_name.startswith("."):
-            print(f"Skipping file: {file_path}")
+    def handle_file(self, file_path: str) -> None:
+        # ignore hidden/system files
+        name = os.path.basename(file_path)
+        if name.startswith(".") or name.startswith("._"):
             return
 
-        # Determine type based on parent folder or classifier
+        # decide type
         if MOVIES_DIR in file_path.split(os.sep):
             dest_type = "movie"
         elif TV_SHOWS_DIR in file_path.split(os.sep):
             dest_type = "tv"
         else:
-            dest_type: Optional[str] = self.classifier_service.classify_file(
-                file_path, self.file_exts
-            )
+            dest_type = self.classifier_service.classify_file(file_path, self.file_exts)
 
-        # Transfer the file
-        if dest_type and self.transfer_service.transfer_file(file_path, dest_type):
-            # TV shows: move only the file to Trash, keep folder
-            if dest_type == "tv":
-                self.deletion_service.delete_file(file_path)
-            # Movies: usually we handle entire folder, file deletion handled in handle_folder
-        else:
-            print(f"❌ Transfer failed for file: {file_path}")
+        try:
+            if dest_type == "movie":
+                # for loose movie files, transfer parent folder (movie folder expected)
+                folder = os.path.dirname(file_path)
+                if self.movie_service.transfer_movie_folder(folder):
+                    self.deletion_service.delete_folder(folder)
+            elif dest_type == "tv":
+                # ensure remote structure and upload the file's folder
+                folder = os.path.dirname(file_path)
+                if self.tv_service.transfer_tv_folder(folder):
+                    if os.path.splitext(file_path)[1].lower() in self.file_exts:
+                        self.deletion_service.delete_file(file_path)
+        except Exception as e:
+            print(f"Transfer error for {file_path}: {e}")
 
-    def handle_folder(self, folder_path: str):
-        """Process a folder event."""
-        folder_name: str = os.path.basename(folder_path)
-        # Skip root Movies or TV_shows folder
-        if folder_name.startswith(".") or folder_name in [MOVIES_DIR, TV_SHOWS_DIR]:
-            print(f"Skipping folder: {folder_path}")
+    def handle_folder(self, folder_path: str) -> None:
+        name = os.path.basename(folder_path)
+        if name.startswith(".") or name in [MOVIES_DIR, TV_SHOWS_DIR]:
             return
 
-        dest_type: Optional[str] = self.classifier_service.classify_folder(folder_path)
-
-        # Transfer entire folder
-        if dest_type and self.transfer_service.transfer_folder(folder_path, dest_type):
-            # After transfer: decide what to move to Trash
+        dest_type = self.classifier_service.classify_folder(folder_path)
+        try:
             if dest_type == "movie":
-                # Movies: move entire folder to Trash
-                self.deletion_service.delete_folder(folder_path)
+                if self.movie_service.transfer_movie_folder(folder_path):
+                    self.deletion_service.delete_folder(folder_path)
             elif dest_type == "tv":
-                # TV shows: move only video files, keep folder structure
-                for root, _, files in os.walk(folder_path):
-                    for f in files:
-                        file_path = os.path.join(root, f)
-                        # Only move video files (based on extension)
-                        if os.path.splitext(f)[1].lower() in self.file_exts:
-                            self.deletion_service.delete_file(file_path)
-        else:
-            print(f"❌ Transfer failed for folder: {folder_path}")
+                if self.tv_service.transfer_tv_folder(folder_path):
+                    # delete only video files in the folder
+                    for root, _, files in os.walk(folder_path):
+                        for f in files:
+                            if f.startswith("."):
+                                continue
+                            ext = os.path.splitext(f)[1].lower()
+                            if ext in self.file_exts:
+                                self.deletion_service.delete_file(os.path.join(root, f))
+        except Exception as e:
+            print(f"Transfer error for folder {folder_path}: {e}")

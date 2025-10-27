@@ -1,4 +1,7 @@
+import os
 import subprocess
+from typing import Optional
+
 from PySide6.QtWidgets import (
     QWidget,
     QPushButton,
@@ -6,68 +9,60 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QLabel,
     QHBoxLayout,
-    QListWidget,
     QSplitter,
-    QFileDialog,
     QMessageBox,
     QDialog,
 )
-from PySide6.QtCore import Qt, Signal, QEvent, QTimer
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QIcon
-import os
-import shutil
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QIcon
 
 import paramiko
+
 from src.config.settings import Settings
 from src.utils.helper import get_path
 from src.utils.logging_signal import logger
 from ui.controllers.monitor_thread import MonitorThread
 from ui.components.settings_window import SettingsWindow
-from typing import Optional
+from ui.components.file_explorer_widget import FileExplorerWidget
 
 
 class MainWindow(QWidget):
-    file_dropped = Signal(str, str)  # Source path, dest_type
-    refresh_pi_list = Signal()  # Signal to refresh Pi folder list
-
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("PiSync")
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(1000, 650)
+
+        # ========== Layout setup ==========
         main_layout: QVBoxLayout = QVBoxLayout()
 
-        # Top Navbar
+        # --- Navbar ---
         navbar_layout: QHBoxLayout = QHBoxLayout()
-        navbar_layout.setObjectName("navbar_layout")  # Set object name for styling
         self.start_btn: QPushButton = QPushButton(" Start Monitoring")
         self.stop_btn: QPushButton = QPushButton(" Stop Monitoring")
         self.stop_btn.setEnabled(False)
-        self.settings_btn: QPushButton = QPushButton("⚙️")
         self.refresh_btn: QPushButton = QPushButton("↻")
+        self.settings_btn: QPushButton = QPushButton("⚙️")
+
+        # Add icons
+        icon_path = get_path("assets/icons/")
+        self.start_btn.setIcon(QIcon(f"{icon_path}/play_icon.svg"))
+        self.stop_btn.setIcon(QIcon(f"{icon_path}/stop_icon.svg"))
 
         navbar_layout.addWidget(self.start_btn)
         navbar_layout.addWidget(self.stop_btn)
         navbar_layout.addWidget(self.refresh_btn)
         navbar_layout.addWidget(self.settings_btn)
-        navbar_layout.addStretch()  # Push buttons to the left
-        navbar_layout.setContentsMargins(10, 5, 10, 5)  # Add padding
+        navbar_layout.addStretch()
+        navbar_layout.setContentsMargins(10, 5, 10, 5)
         main_layout.addLayout(navbar_layout)
 
-        # Set icons for buttons
-        icon_path_base = get_path("assets/icons/")
-        self.start_btn.setIcon(QIcon(str(icon_path_base / "play_icon.svg")))
-        self.stop_btn.setIcon(QIcon(str(icon_path_base / "stop_icon.svg")))
-
-        # Status Label below navbar
-        self.status_label: QLabel = QLabel("Status: Idle")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # --- Status label ---
+        self.status_label: QLabel = QLabel("Status: Idle 🛑")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         main_layout.addWidget(self.status_label)
 
-        # Splitter for two columns
-        splitter: QSplitter = QSplitter(Qt.Orientation.Horizontal)
-
+        # --- Settings check ---
         self.settings: Settings = Settings()
-        # Checking on settings.
         if not self.settings.is_valid():
             QMessageBox.warning(
                 self,
@@ -89,143 +84,90 @@ class MainWindow(QWidget):
                 self.close()
                 return
 
-        # Left Column: Watch Directory
-        left_widget: QWidget = QWidget()
-        left_layout: QVBoxLayout = QVBoxLayout()
-        self.watch_dir_list: QListWidget = QListWidget()
-        self.watch_dir_list.setAcceptDrops(True)  # Enable drop
-        self.watch_dir_list.itemDoubleClicked.connect(self.open_file_explorer)
-        self.update_watch_dir_list()
-        left_layout.addWidget(QLabel("Watch Directory:"))
-        left_layout.addWidget(self.watch_dir_list)
-        left_widget.setLayout(left_layout)
+        # ========== Splitter for two explorers ==========
+        splitter: QSplitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Right Column: Pi Folder
-        right_widget: QWidget = QWidget()
-        right_layout: QVBoxLayout = QVBoxLayout()
-        self.pi_list: QListWidget = QListWidget()
-        self.pi_list.setAcceptDrops(True)
-        self.pi_list.itemDoubleClicked.connect(self.open_pi_explorer)
-        self.update_pi_list()
-        right_layout.addWidget(QLabel("Pi Folder:"))
-        right_layout.addWidget(self.pi_list)
-        right_widget.setLayout(right_layout)
+        # --- Left: Mac Watch Directory ---
+        self.watch_explorer: FileExplorerWidget = FileExplorerWidget(
+            root_path=self.settings.watch_dir,
+            title="Watch Directory",
+        )
 
-        # Add widgets to splitter
-        splitter.addWidget(left_widget)
-        splitter.addWidget(right_widget)
+        # --- Right: Raspberry Pi Directory ---
+        self.ssh_for_ui = None
+        self.sftp_for_ui = None
+        try:
+            ssh = paramiko.SSHClient()
+            ssh.load_system_host_keys()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(self.settings.pi_ip, username=self.settings.pi_user, timeout=10)
+            self.sftp_for_ui = ssh.open_sftp()
+            self.ssh_for_ui = ssh
+        except Exception as e:
+            logger.log_signal.emit(
+                f"⚠️ Could not connect to Pi SFTP for UI explorer: {e}"
+            )
+            self.sftp_for_ui = None
+            self.ssh_for_ui = None
+
+        self.pi_explorer = FileExplorerWidget(
+            root_path="/mnt/external/",
+            title="Raspberry Pi Files",
+            is_remote=True,
+            sftp=self.sftp_for_ui,
+        )
+
+        # Add explorers to splitter
+        splitter.addWidget(self.watch_explorer)
+        splitter.addWidget(self.pi_explorer)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
         main_layout.addWidget(splitter)
 
-        # Log Box
+        # --- Log Box ---
         self.log_box: QTextEdit = QTextEdit()
         self.log_box.setReadOnly(True)
         main_layout.addWidget(self.log_box)
 
-        self.setLayout(main_layout)
+        # ========== Setup connections ==========
         self.start_btn.clicked.connect(self.start_monitor)
         self.stop_btn.clicked.connect(self.stop_monitor)
+        self.refresh_btn.clicked.connect(self.refresh_explorers)
         self.settings_btn.clicked.connect(self.open_settings)
-        self.refresh_btn.clicked.connect(self.refresh_lists)
-        logger.log_signal.connect(self.log)  # Connect to logger's signal
-        self.installEventFilter(self)  # Install event filter on MainWindow
-        self.monitor_thread: Optional[MonitorThread] = None
-
-        self.refresh_pi_list.connect(self.update_pi_list)
-
-        self.refresh_timer = QTimer(self)
-        self.refresh_timer.timeout.connect(self.update_watch_dir_list)
-        self.refresh_timer.start(5000)
+        self.watch_explorer.file_opened.connect(self.handle_file_open)
+        self.pi_explorer.file_opened.connect(self.handle_file_open)
+        logger.log_signal.connect(self.log)
+        self.setLayout(main_layout)
 
         self.check_pi_connection(
             pi_user=self.settings.pi_user, pi_ip=self.settings.pi_ip
         )
 
-    def update_watch_dir_list(self) -> None:
-        """Update the MacBook folder list with watch directory contents."""
-        watch_dir = self.settings.watch_dir
-        if os.path.exists(watch_dir):
-            self.watch_dir_list.clear()
-            files = [
-                f
-                for f in os.listdir(watch_dir)
-                if os.path.isfile(os.path.join(watch_dir, f))
-            ]
-            self.watch_dir_list.addItems(files)
-        else:
-            self.watch_dir_list.clear()
-            self.watch_dir_list.addItem("Watch directory not found")
+        self.monitor_thread: Optional[MonitorThread] = None
 
-    def update_pi_list(self) -> None:
-        """Update the Pi folder list with contents from pi_movies and pi_tv."""
-        self.pi_list.clear()
-        if not all(
-            [
-                self.settings.pi_user,
-                self.settings.pi_ip,
-                self.settings.pi_movies,
-                self.settings.pi_tv,
-            ]
-        ):
-            self.pi_list.addItem("Pi settings not configured")
-            return
+        # Auto-refresh local folder
+        self.refresh_timer: QTimer = QTimer(self)
+        self.refresh_timer.timeout.connect(self.watch_explorer.refresh)
+        self.refresh_timer.start(5000)
 
-        try:
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(self.settings.pi_ip, username=self.settings.pi_user)
-            sftp = ssh.open_sftp()
+    # ========== Event Handlers ==========
 
-            for path in [self.settings.pi_movies, self.settings.pi_tv]:
-                try:
-                    files = sftp.listdir(path)
-                    for file in files:
-                        self.pi_list.addItem(f"{path}/{file}")
-                except IOError as e:
-                    logger.log_signal.emit(f"Error accessing {path} on Pi: {e}")
+    def refresh_explorers(self) -> None:
+        """Manual refresh for both explorers."""
+        self.watch_explorer.refresh()
+        self.pi_explorer.refresh()
+        self.log("🔄 Refreshed both explorers.")
 
-            sftp.close()
-            ssh.close()
-        except Exception as e:
-            self.pi_list.addItem(f"Connection error: {e}")
-            logger.log_signal.emit(f"Failed to connect to Pi: {e}")
-
-    def refresh_lists(self) -> None:
-        """Refresh both MacBook and Pi lists."""
-        self.update_watch_dir_list()
-        self.update_pi_list()
-
-    def open_file_explorer(self, item) -> None:
-        """Open the file explorer for the selected MacBook file."""
-        file_path = os.path.join(self.settings.watch_dir, item.text())
-        if os.path.exists(file_path):
-            QFileDialog.getOpenFileName(self, "Open File", file_path)
-
-    def open_pi_explorer(self, item) -> None:
-        """Open a dialog to simulate exploring the Pi file (read-only for now)."""
-        file_path = item.text()
-        QMessageBox.information(
-            self,
-            "Pi File",
-            f"Viewing: {file_path}\n(SSH access required for full exploration)",
-        )
-
-    def _scan_folder(self, path: str) -> list[str]:
-        """Scan folder for files and return a list of names."""
-        if not os.path.exists(path):
-            os.makedirs(path, exist_ok=True)
-        return [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-
-    def log(self, message: str) -> None:
-        self.log_box.append(message)
+    def handle_file_open(self, path: str) -> None:
+        """Handle double-click on file event (placeholder)."""
+        self.log(f"📂 Opened file: {path}")
 
     def start_monitor(self) -> None:
         if self.monitor_thread and self.monitor_thread.isRunning():
             self.log("⚠️ Already monitoring.")
             return
-        self.log("🚀 Launching monitor thread...")
-        self.status_label.setText("Status: Monitoring")
+
+        # create and start monitor thread, reusing UI sftp client if available
         self.monitor_thread = MonitorThread(
             self.settings.watch_dir,
             self.settings.pi_user,
@@ -234,69 +176,43 @@ class MainWindow(QWidget):
             self.settings.pi_tv,
             self.settings.file_exts,
             self,
+            sftp_client=self.sftp_for_ui,
         )
         self.monitor_thread.log_signal.connect(self.log)
-        self.file_dropped.connect(self.monitor_thread.handle_dropped_file)
         self.monitor_thread.start()
+        self.status_label.setText("Status: Monitoring 🟢")
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
-        self.refresh_pi_list.connect(self.monitor_thread.refresh_pi_list)
 
     def stop_monitor(self) -> None:
         if self.monitor_thread:
             self.monitor_thread.stop()
             self.monitor_thread.wait()
-            self.log("🛑 Monitor stopped.")
-            self.status_label.setText("Status: Idle")
+            self.log("🛑 Monitor: Stopped")
+            self.status_label.setText("Status: Idle 🛑")
             self.start_btn.setEnabled(True)
             self.stop_btn.setEnabled(False)
 
+        # close UI SFTP if it exists and wasn't passed/closed by monitor thread
+        try:
+            if self.sftp_for_ui:
+                self.sftp_for_ui.close()
+            if self.ssh_for_ui:
+                self.ssh_for_ui.close()
+        except Exception:
+            pass
+
     def open_settings(self) -> None:
+        """Open settings dialog."""
         settings_window = SettingsWindow(self.settings)
         if settings_window.exec() == QDialog.accepted:
-            self.update_watch_dir_list()  # Refresh MacBook list after settings change
-            self.refresh_pi_list.emit()  # Refresh Pi list after settings change
+            self.refresh_explorers()
 
-    def eventFilter(self, obj: object, event: QEvent) -> bool:
-        if obj == self.watch_dir_list and event.type() == QEvent.Type.DragEnter:
-            event: QDragEnterEvent = event
-            if event.mimeData().hasUrls():
-                event.accept()
-                return True
-        elif obj == self.watch_dir_list and event.type() == QEvent.Type.Drop:
-            event: QDropEvent = event
-            for url in event.mimeData().urls():
-                file_path = url.toLocalFile()
-                if os.path.isfile(file_path):
-                    dest_path = os.path.join(
-                        self.settings.watch_dir, os.path.basename(file_path)
-                    )
-                    try:
-                        shutil.copy2(file_path, dest_path)
-                        self.update_watch_dir_list()
-                        logger.log_signal.emit(
-                            f"✅ Added {os.path.basename(file_path)} to Watch Directory"
-                        )
-                    except Exception as e:
-                        logger.log_signal.emit(
-                            f"❌ Failed to add {os.path.basename(file_path)}: {e}"
-                        )
-            return True
-        elif obj == self.pi_list and event.type() == QEvent.Type.DragEnter:
-            event: QDragEnterEvent = event
-            if event.mimeData().hasUrls():
-                event.accept()
-                return True
-        elif obj == self.pi_list and event.type() == QEvent.Type.Drop:
-            event: QDropEvent = event
-            for url in event.mimeData().urls():
-                file_path = url.toLocalFile()
-                if os.path.isfile(file_path):
-                    self.file_dropped.emit(file_path, "movie")
-            return True
-        return super().eventFilter(obj, event)
+    def log(self, message: str) -> None:
+        """Write log messages to text box."""
+        self.log_box.append(message)
 
-    def check_pi_connection(self, pi_user: str, pi_ip: str):
+    def check_pi_connection(self, pi_user: str, pi_ip: str) -> None:
         """Quick connectivity test before starting the service."""
         logger.log_signal.emit(f"🔍 Checking connection to {pi_ip}...")
         try:
@@ -316,3 +232,69 @@ class MainWindow(QWidget):
             logger.log_signal.emit("- Is the IP/hostname correct?")
             logger.log_signal.emit("- Are both devices on the same Wi-Fi?")
             exit(1)
+
+    def transfer_existing_files(self) -> None:
+        """Scan ~/Transfers for files and upload them to the Raspberry Pi before monitoring."""
+        transfers_dir = self.settings.watch_dir
+        if not os.path.exists(transfers_dir):
+            self.log("📁 No ~/Transfers folder found. Skipping pre-scan.")
+            return
+
+        self.log("🔍 Scanning ~/Transfers for files to transfer...")
+        transferred_count = 0
+
+        try:
+            # Ensure SFTP connection
+            if not self.pi_explorer.sftp:
+                self.log(
+                    "⚠️ SFTP connection not available. Cannot transfer existing files."
+                )
+                return
+
+            for root, _, files in os.walk(transfers_dir):
+                for file in files:
+                    # ✅ Skip unwanted system files
+                    if file.startswith(".") or file in self.settings.skip_files:
+                        continue
+
+                    local_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(local_path, transfers_dir)
+                    remote_path = os.path.join("/mnt/external/", relative_path)
+
+                    # Ensure remote directory exists
+                    remote_dir = os.path.dirname(remote_path)
+                    try:
+                        self.pi_explorer.sftp.stat(remote_dir)
+                    except IOError:
+                        self._make_remote_dirs(self.pi_explorer.sftp, remote_dir)
+
+                    # Upload file
+                    self.log(f"⬆️ Uploading: {local_path} → {remote_path}")
+                    self.pi_explorer.sftp.put(local_path, remote_path)
+                    transferred_count += 1
+
+            if transferred_count > 0:
+                self.log(
+                    f"✅ Completed transfer of {transferred_count} file(s) from ~/Transfers."
+                )
+            else:
+                self.log("ℹ️ No valid files found to transfer in ~/Transfers.")
+        except Exception as e:
+            self.log(f"❌ Error during pre-transfer: {e}")
+
+    def _make_remote_dirs(self, sftp, remote_directory: str) -> None:
+        """Recursively create remote directories if they don't exist."""
+        dirs = []
+        while len(remote_directory) > 1:
+            try:
+                sftp.stat(remote_directory)
+                break
+            except IOError:
+                dirs.append(remote_directory)
+                remote_directory = os.path.dirname(remote_directory)
+
+        for d in reversed(dirs):
+            try:
+                sftp.mkdir(d)
+            except Exception:
+                pass

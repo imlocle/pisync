@@ -46,6 +46,8 @@ Welcome to **PiSync**, a Python-based application designed to automate the trans
      --add-data="assets/icons/stop_icon.svg:assets/icons" \
      --add-data="assets/styles/styles.qss:assets/styles" \
      --add-data="ui/controllers/monitor_thread.py:ui/controllers" \
+     --add-data="ui/components/file_explorer_widget.py:ui/components" \
+     --add-data="ui/components/main_window.py:ui/components" \
      --add-data="ui/components/settings_window.py:ui/components" \
      --add-data="src/config/settings.py:src/config" \
      --add-data="src/utils/logging_signal.py:src/utils" \
