@@ -11,8 +11,12 @@ class BaseTransferService:
     Uses an already-connected paramiko.SFTPClient instance.
     """
 
-    def __init__(self, sftp: paramiko.SFTPClient) -> None:
+    def __init__(
+        self, sftp: paramiko.SFTPClient, watch_dir: str, pi_root_dir: str
+    ) -> None:
         self.sftp: paramiko.SFTPClient = sftp
+        self.watch_dir = watch_dir
+        self.pi_root_dir = pi_root_dir
         self.file_deletion_service: FileDeletionService = FileDeletionService()
 
     def ensure_remote_directory(self, remote_dir: str) -> None:
@@ -56,12 +60,8 @@ class BaseTransferService:
                 remote_file = os.path.join(remote_folder, rel).replace("\\", "/")
                 remote_dir = os.path.dirname(remote_file)
                 self.ensure_remote_directory(remote_dir)
-                logger.log_signal.emit(f"🚀 Start: Transfer: File: {local_file}")
-                logger.log_signal.emit(
-                    f"🚀 Start: Transfer: Destination: {remote_file}"
-                )
+                logger.start(f"Transfer: Start: File: {local_file}")
+                logger.upload(f"Transfer: Start: Upload: {remote_file}")
                 self.sftp.put(local_file, remote_file)
-                logger.log_signal.emit(
-                    f"✅ Complete: Transfer: Destination: {remote_file}\n"
-                )
+                logger.success(f"Transfer: Completed: Upload: {remote_file}")
                 self.file_deletion_service.delete_file(local_file)

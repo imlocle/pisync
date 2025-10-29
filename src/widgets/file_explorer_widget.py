@@ -14,6 +14,7 @@ from PySide6.QtGui import QIcon, QDragEnterEvent, QDropEvent, QPainter, QColor, 
 import os
 import shutil
 import paramiko
+from src.utils.logging_signal import logger
 
 
 class FileExplorerWidget(QWidget):
@@ -30,6 +31,8 @@ class FileExplorerWidget(QWidget):
         title: str = "Explorer",
     ) -> None:
         super().__init__()
+        self.title = title
+        self.log_signal = logger.log_signal
         self.root_path: str = root_path
         self.current_path: str = root_path
         self.is_remote: bool = is_remote
@@ -40,7 +43,7 @@ class FileExplorerWidget(QWidget):
         header_layout: QHBoxLayout = QHBoxLayout()
 
         self.back_btn: QPushButton = QPushButton("← Back")
-        self.title_label: QLabel = QLabel(f"{title} ({root_path})")
+        self.title_label: QLabel = QLabel(f"{self.title} ({self.root_path})")
         self.title_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
@@ -65,6 +68,7 @@ class FileExplorerWidget(QWidget):
     def refresh(self) -> None:
         """Refreshes the list to show the current directory contents."""
         self.list_widget.clear()
+        self.title_label: QLabel = QLabel(f"{self.title} ({self.root_path})")
         try:
             entries: List[str] = []
             if self.is_remote and self.sftp:

@@ -11,7 +11,7 @@ class FileDeletionService:
         try:
             if os.path.isfile(file_path):
                 send2trash(file_path)
-                logger.log_signal.emit(f"✅ Complete: Transfer: Trash: {file_path}")
+                logger.trash(f"Transfer: Completed: {file_path}")
                 return True
             return False
         except Exception as e:

@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 import sys
-from ui.components.main_window import MainWindow
+from src.components.main_window import MainWindow
 from src.utils.helper import get_path
 
 

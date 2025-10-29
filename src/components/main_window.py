@@ -1,5 +1,4 @@
 import os
-import subprocess
 from typing import Optional
 
 from PySide6.QtWidgets import (
@@ -18,51 +17,117 @@ from PySide6.QtGui import QIcon
 
 import paramiko
 
+from src.components.settings_window import SettingsWindow
 from src.config.settings import Settings
+from src.controllers.monitor_thread import MonitorThread
+from src.utils.constants import SOFTARE_NAME
 from src.utils.helper import get_path
 from src.utils.logging_signal import logger
-from ui.controllers.monitor_thread import MonitorThread
-from ui.components.settings_window import SettingsWindow
-from ui.components.file_explorer_widget import FileExplorerWidget
+from src.widgets.file_explorer_widget import FileExplorerWidget
 
 
 class MainWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("PiSync")
+        self.setWindowTitle(SOFTARE_NAME)
         self.setMinimumSize(1000, 650)
+
+        self.log_box = QTextEdit()
+        self.monitor_thread: Optional[MonitorThread] = None
+        self.ssh_for_ui = None
+        self.sftp_for_ui = None
+        self.settings: Settings = Settings()
+
+        # === 1. Validate Settings ===
+        if not self._validate_settings():
+            return
+
+        self.is_pi_connected: bool = self._check_pi_connection()
 
         # ========== Layout setup ==========
         main_layout: QVBoxLayout = QVBoxLayout()
+        self._setup_navbar(main_layout)
+        self._setup_splitter(main_layout)
+        self._setup_log_box(main_layout)
+        self._setup_status_label(main_layout)
+        self.setLayout(main_layout)
 
-        # --- Navbar ---
-        navbar_layout: QHBoxLayout = QHBoxLayout()
-        self.start_btn: QPushButton = QPushButton(" Start Monitoring")
-        self.stop_btn: QPushButton = QPushButton(" Stop Monitoring")
+        # === 3. Connect Signals ===
+        self._setup_connections()
+
+        # === 4. Initialize Background Tasks ===
+        self._start_refresh_timer()
+
+    # ==========================================================
+    #  UI SETUP METHODS
+    # ==========================================================
+
+    def _setup_navbar(self, layout: QVBoxLayout) -> None:
+        navbar_layout = QHBoxLayout()
+        self.start_btn = QPushButton(" Start Monitoring")
+        self.stop_btn = QPushButton(" Stop Monitoring")
         self.stop_btn.setEnabled(False)
-        self.refresh_btn: QPushButton = QPushButton("↻")
-        self.settings_btn: QPushButton = QPushButton("⚙️")
+        self.upload_all_btn = QPushButton("⬆️ Upload All")
+        self.refresh_btn = QPushButton("↻ Refresh")
+        self.settings_btn = QPushButton("⚙️ Settings")
 
-        # Add icons
         icon_path = get_path("assets/icons/")
         self.start_btn.setIcon(QIcon(f"{icon_path}/play_icon.svg"))
         self.stop_btn.setIcon(QIcon(f"{icon_path}/stop_icon.svg"))
 
         navbar_layout.addWidget(self.start_btn)
         navbar_layout.addWidget(self.stop_btn)
+        navbar_layout.addWidget(self.upload_all_btn)
         navbar_layout.addWidget(self.refresh_btn)
         navbar_layout.addWidget(self.settings_btn)
         navbar_layout.addStretch()
         navbar_layout.setContentsMargins(10, 5, 10, 5)
-        main_layout.addLayout(navbar_layout)
+        layout.addLayout(navbar_layout)
 
-        # --- Status label ---
-        self.status_label: QLabel = QLabel("Status: Idle 🛑")
+    def _setup_status_label(self, layout: QVBoxLayout) -> None:
+        self.status_label = QLabel("Status: Idle 🛑")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        main_layout.addWidget(self.status_label)
+        layout.addWidget(self.status_label)
 
-        # --- Settings check ---
-        self.settings: Settings = Settings()
+    def _setup_splitter(self, layout: QVBoxLayout) -> None:
+        splitter: QSplitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # --- Local Watch Directory ---
+        self.watch_explorer: FileExplorerWidget = FileExplorerWidget(
+            root_path=self.settings.watch_dir,
+            title="Watch Directory",
+        )
+
+        # --- Right: Raspberry Pi Directory ---
+        if not self.is_pi_connected:
+            self.is_pi_connected = self._check_pi_connection()
+
+        try:
+            self.pi_explorer = FileExplorerWidget(
+                root_path=self.settings.pi_root_dir,
+                title="Raspberry Pi Files",
+                is_remote=True,
+                sftp=self.sftp_for_ui,
+            )
+        except Exception as e:
+            logger.error(str(e))
+
+        # Add explorers to splitter
+        splitter.addWidget(self.watch_explorer)
+        splitter.addWidget(self.pi_explorer)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter)
+
+    def _setup_log_box(self, layout: QVBoxLayout) -> None:
+        self.log_box.setReadOnly(True)
+        layout.addWidget(self.log_box)
+
+    # ==========================================================
+    #  SETUP HELPERS
+    # ==========================================================
+
+    def _validate_settings(self) -> bool:
         if not self.settings.is_valid():
             QMessageBox.warning(
                 self,
@@ -71,116 +136,86 @@ class MainWindow(QWidget):
                 QMessageBox.StandardButton.Ok,
             )
             settings_window = SettingsWindow(self.settings)
+
             if (
-                settings_window.exec() != QDialog.accepted
+                settings_window.exec() != QDialog.DialogCode.Accepted
                 or not self.settings.is_valid()
             ):
                 QMessageBox.critical(
                     self,
                     "Setup Failed",
-                    "Settings are required to run PiSync. Please provide valid settings.",
+                    "Settings are required to run PiSync.",
                     QMessageBox.StandardButton.Ok,
                 )
                 self.close()
-                return
+                return False
+        return True
 
-        # ========== Splitter for two explorers ==========
-        splitter: QSplitter = QSplitter(Qt.Orientation.Horizontal)
-
-        # --- Left: Mac Watch Directory ---
-        self.watch_explorer: FileExplorerWidget = FileExplorerWidget(
-            root_path=self.settings.watch_dir,
-            title="Watch Directory",
-        )
-
-        # --- Right: Raspberry Pi Directory ---
-        self.ssh_for_ui = None
-        self.sftp_for_ui = None
+    def _setup_connections(self) -> None:
         try:
-            ssh = paramiko.SSHClient()
-            ssh.load_system_host_keys()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(self.settings.pi_ip, username=self.settings.pi_user, timeout=10)
-            self.sftp_for_ui = ssh.open_sftp()
-            self.ssh_for_ui = ssh
-        except Exception as e:
-            logger.log_signal.emit(
-                f"⚠️ Could not connect to Pi SFTP for UI explorer: {e}"
-            )
-            self.sftp_for_ui = None
-            self.ssh_for_ui = None
+            logger.log_signal.disconnect(self.log)
+        except Exception:
+            pass
 
-        self.pi_explorer = FileExplorerWidget(
-            root_path="/mnt/external/",
-            title="Raspberry Pi Files",
-            is_remote=True,
-            sftp=self.sftp_for_ui,
-        )
-
-        # Add explorers to splitter
-        splitter.addWidget(self.watch_explorer)
-        splitter.addWidget(self.pi_explorer)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 1)
-        main_layout.addWidget(splitter)
-
-        # --- Log Box ---
-        self.log_box: QTextEdit = QTextEdit()
-        self.log_box.setReadOnly(True)
-        main_layout.addWidget(self.log_box)
-
-        # ========== Setup connections ==========
+        logger.log_signal.connect(self.log)
         self.start_btn.clicked.connect(self.start_monitor)
         self.stop_btn.clicked.connect(self.stop_monitor)
+        self.upload_all_btn.clicked.connect(self.transfer_existing_files)
         self.refresh_btn.clicked.connect(self.refresh_explorers)
         self.settings_btn.clicked.connect(self.open_settings)
         self.watch_explorer.file_opened.connect(self.handle_file_open)
         self.pi_explorer.file_opened.connect(self.handle_file_open)
-        logger.log_signal.connect(self.log)
-        self.setLayout(main_layout)
 
-        self.check_pi_connection(
-            pi_user=self.settings.pi_user, pi_ip=self.settings.pi_ip
-        )
-
-        self.monitor_thread: Optional[MonitorThread] = None
-
-        # Auto-refresh local folder
-        self.refresh_timer: QTimer = QTimer(self)
+    def _start_refresh_timer(self) -> None:
+        self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.watch_explorer.refresh)
         self.refresh_timer.start(5000)
+
+    def initialize_pi_explorer(self) -> None:
+        if not self.is_pi_connected:
+            logger.warn("Pi Explorer: Failed to connect")
+            self.is_pi_connected = self._check_pi_connection()
 
     # ========== Event Handlers ==========
 
     def refresh_explorers(self) -> None:
         """Manual refresh for both explorers."""
+        self.watch_explorer.root_path = self.settings.watch_dir
+        self.pi_explorer.root_path = self.settings.pi_root_dir
+
         self.watch_explorer.refresh()
         self.pi_explorer.refresh()
-        self.log("🔄 Refreshed both explorers.")
+        logger.info("Refreshed both explorers.")
 
     def handle_file_open(self, path: str) -> None:
         """Handle double-click on file event (placeholder)."""
-        self.log(f"📂 Opened file: {path}")
+        logger.info(f"📂 Opened file: {path}")
 
     def start_monitor(self) -> None:
         if self.monitor_thread and self.monitor_thread.isRunning():
-            self.log("⚠️ Already monitoring.")
+            logger.warn("Already monitoring.")
             return
 
-        # create and start monitor thread, reusing UI sftp client if available
+        if not self.is_pi_connected:
+            self.is_pi_connected = self._check_pi_connection()
+        else:
+            logger.success(f"Connected: {self.settings.pi_ip}")
+
         self.monitor_thread = MonitorThread(
             self.settings.watch_dir,
             self.settings.pi_user,
             self.settings.pi_ip,
+            self.settings.pi_root_dir,
             self.settings.pi_movies,
             self.settings.pi_tv,
             self.settings.file_exts,
             self,
             sftp_client=self.sftp_for_ui,
         )
-        self.monitor_thread.log_signal.connect(self.log)
+
         self.monitor_thread.start()
-        self.status_label.setText("Status: Monitoring 🟢")
+        logger.search(f"Monitor: Start: {self.settings.watch_dir}")
+        self.status_label.setText("🟢 Status: Monitoring: Active")
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
 
@@ -188,8 +223,8 @@ class MainWindow(QWidget):
         if self.monitor_thread:
             self.monitor_thread.stop()
             self.monitor_thread.wait()
-            self.log("🛑 Monitor: Stopped")
-            self.status_label.setText("Status: Idle 🛑")
+            logger.stop("Monitor: Stop")
+            self.status_label.setText("🛑 Status: Monitoring: Idle")
             self.start_btn.setEnabled(True)
             self.stop_btn.setEnabled(False)
 
@@ -205,55 +240,51 @@ class MainWindow(QWidget):
     def open_settings(self) -> None:
         """Open settings dialog."""
         settings_window = SettingsWindow(self.settings)
-        if settings_window.exec() == QDialog.accepted:
+        if settings_window.exec() == QDialog.DialogCode.Accepted:
             self.refresh_explorers()
 
     def log(self, message: str) -> None:
         """Write log messages to text box."""
         self.log_box.append(message)
 
-    def check_pi_connection(self, pi_user: str, pi_ip: str) -> None:
+    def _check_pi_connection(self) -> bool:
         """Quick connectivity test before starting the service."""
-        logger.log_signal.emit(f"🔍 Checking connection to {pi_ip}...")
+        logger.search(f"Checking connection to {self.settings.pi_ip}...")
+
         try:
-            subprocess.run(
-                ["ssh", f"{pi_user}@{pi_ip}", "echo", "connected"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            logger.log_signal.emit(f"✅ Successfully connected to {pi_ip}\n")
-        except subprocess.CalledProcessError as e:
-            logger.log_signal.emit(f"❌ Cannot connect to {pi_ip}. Error:")
-            logger.log_signal.emit(e.stderr.strip())
-            logger.log_signal.emit("\nPlease check:")
-            logger.log_signal.emit("- Is the Raspberry Pi online?")
-            logger.log_signal.emit("- Is SSH enabled on the Pi?")
-            logger.log_signal.emit("- Is the IP/hostname correct?")
-            logger.log_signal.emit("- Are both devices on the same Wi-Fi?")
-            exit(1)
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(self.settings.pi_ip, username=self.settings.pi_user, timeout=10)
+            self.sftp_for_ui = ssh.open_sftp()
+            self.ssh_for_ui = ssh
+            logger.success(f"Successfully connected to {self.settings.pi_ip}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to connect to {self.settings.pi_ip}: {e}")
+            self.sftp_for_ui = None
+            self.ssh_for_ui = None
+            return False
 
     def transfer_existing_files(self) -> None:
         """Scan ~/Transfers for files and upload them to the Raspberry Pi before monitoring."""
         transfers_dir = self.settings.watch_dir
         if not os.path.exists(transfers_dir):
-            self.log("📁 No ~/Transfers folder found. Skipping pre-scan.")
+            logger.info("No ~/Transfers folder found. Skipping pre-scan.")
             return
 
-        self.log("🔍 Scanning ~/Transfers for files to transfer...")
+        logger.search("Scanning ~/Transfers for files to transfer...")
         transferred_count = 0
 
         try:
             # Ensure SFTP connection
             if not self.pi_explorer.sftp:
-                self.log(
-                    "⚠️ SFTP connection not available. Cannot transfer existing files."
+                logger.warn(
+                    "SFTP connection not available. Cannot transfer existing files."
                 )
                 return
 
             for root, _, files in os.walk(transfers_dir):
                 for file in files:
-                    # ✅ Skip unwanted system files
                     if file.startswith(".") or file in self.settings.skip_files:
                         continue
 
@@ -269,18 +300,18 @@ class MainWindow(QWidget):
                         self._make_remote_dirs(self.pi_explorer.sftp, remote_dir)
 
                     # Upload file
-                    self.log(f"⬆️ Uploading: {local_path} → {remote_path}")
+                    logger.info(f"Uploading: {local_path} → {remote_path}")
                     self.pi_explorer.sftp.put(local_path, remote_path)
                     transferred_count += 1
 
             if transferred_count > 0:
-                self.log(
-                    f"✅ Completed transfer of {transferred_count} file(s) from ~/Transfers."
+                logger.success(
+                    f"Completed transfer of {transferred_count} file(s) from ~/Transfers."
                 )
             else:
-                self.log("ℹ️ No valid files found to transfer in ~/Transfers.")
+                logger.info("No valid files found to transfer in ~/Transfers.")
         except Exception as e:
-            self.log(f"❌ Error during pre-transfer: {e}")
+            logger.error(f"Error during pre-transfer: {e}")
 
     def _make_remote_dirs(self, sftp, remote_directory: str) -> None:
         """Recursively create remote directories if they don't exist."""

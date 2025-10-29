@@ -8,10 +8,12 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QFormLayout,
 )
+from PySide6.QtGui import QTextOption
 from PySide6.QtCore import QDateTime, Qt
 from pathlib import Path
 
 from src.config.settings import Settings, SettingsConfig
+from src.utils.constants import CONFIG_JSON, SOFTARE_NAME
 from src.utils.logging_signal import logger
 
 
@@ -21,7 +23,7 @@ class SettingsWindow(QDialog):
     def __init__(self, settings: Settings):
         super().__init__()
         self.settings = settings
-        self.setWindowTitle("PiSync Settings")
+        self.setWindowTitle(f"{SOFTARE_NAME} Settings")
         self.setMinimumSize(420, 560)
 
         # ------------------------------------------------------------------
@@ -38,6 +40,7 @@ class SettingsWindow(QDialog):
         # ---- Pi connection ------------------------------------------------
         self.pi_user_input = QLineEdit(settings.pi_user)
         self.pi_ip_input = QLineEdit(settings.pi_ip)
+        self.pi_root_dir_input = QLineEdit(settings.pi_root_dir)
         self.pi_movies_input = QLineEdit(settings.pi_movies)
         self.pi_tv_input = QLineEdit(settings.pi_tv)
         self.watch_dir_input = QLineEdit(settings.watch_dir)
@@ -46,6 +49,7 @@ class SettingsWindow(QDialog):
         for input_field in [
             self.pi_user_input,
             self.pi_ip_input,
+            self.pi_root_dir_input,
             self.pi_movies_input,
             self.pi_tv_input,
             self.watch_dir_input,
@@ -54,18 +58,31 @@ class SettingsWindow(QDialog):
 
         form.addRow("Pi User:", self.pi_user_input)
         form.addRow("Pi IP:", self.pi_ip_input)
+        form.addRow("Pi Root Directory:", self.pi_root_dir_input)
         form.addRow("Pi Movies Path:", self.pi_movies_input)
         form.addRow("Pi TV Path:", self.pi_tv_input)
-        form.addRow("Watch Directory:", self.watch_dir_input)
+        form.addRow("Local Watch Directory:", self.watch_dir_input)
 
         # ---- File extensions / skip files --------------------------------
-        self.file_exts_input = QTextEdit("\n".join(settings.file_exts))
+        self.file_exts_input = QTextEdit(", ".join(sorted(settings.file_exts)))
         self.file_exts_input.setMaximumHeight(80)
-        self.skip_files_input = QTextEdit("\n".join(settings.skip_files))
-        self.skip_files_input.setMaximumHeight(80)
+        self.file_exts_input.setAcceptRichText(False)
+        self.file_exts_input.setWordWrapMode(QTextOption.WrapMode.NoWrap)
 
-        form.addRow("File Extensions (one per line):", self.file_exts_input)
-        form.addRow("Skip Files (one per line):", self.skip_files_input)
+        self.skip_files_input = QTextEdit(", ".join(sorted(settings.skip_files)))
+        self.skip_files_input.setMaximumHeight(80)
+        self.skip_files_input.setAcceptRichText(False)
+        self.skip_files_input.setWordWrapMode(QTextOption.WrapMode.NoWrap)
+
+        self.file_exts_input.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self.skip_files_input.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+
+        form.addRow("File Extensions (comma separated):", self.file_exts_input)
+        form.addRow("Skip Files (comma separated):", self.skip_files_input)
 
         main_layout.addLayout(form)
 
@@ -100,12 +117,11 @@ class SettingsWindow(QDialog):
     def _update_last_modified(self):
         """Show the modification timestamp of the *active* config file."""
         # The config is always saved to ~/.PiSync/config.json
-        cfg_path = Path.home() / ".PiSync" / "config.json"
+        cfg_path = Path.home() / f".{SOFTARE_NAME}" / CONFIG_JSON
 
         if cfg_path.is_file():
             mtime = cfg_path.stat().st_mtime
             dt = QDateTime.fromSecsSinceEpoch(int(mtime))
-            # Human-readable format (e.g. “2025-10-20 19:42:13”)
             pretty = dt.toString("yyyy-MM-dd hh:mm:ss")
             self.last_mod_label.setText(f"Config last modified: {pretty}")
         else:
@@ -117,19 +133,20 @@ class SettingsWindow(QDialog):
     def save_settings(self):
         """Collect UI values, write the config, and refresh the date."""
         config_data = {
-            "pi_user": self.pi_user_input.text(),
-            "pi_ip": self.pi_ip_input.text(),
-            "pi_movies": self.pi_movies_input.text(),
-            "pi_tv": self.pi_tv_input.text(),
-            "watch_dir": self.watch_dir_input.text(),
+            "pi_user": self.pi_user_input.text().strip(),
+            "pi_ip": self.pi_ip_input.text().strip(),
+            "pi_root_dir": self.pi_root_dir_input.text().rstrip("/").strip(),
+            "pi_movies": self.pi_movies_input.text().strip(),
+            "pi_tv": self.pi_tv_input.text().strip(),
+            "watch_dir": self.watch_dir_input.text().strip(),
             "file_exts": [
                 ext.strip()
-                for ext in self.file_exts_input.toPlainText().split("\n")
+                for ext in self.file_exts_input.toPlainText().split(",")
                 if ext.strip()
             ],
             "skip_files": [
                 f.strip()
-                for f in self.skip_files_input.toPlainText().split("\n")
+                for f in self.skip_files_input.toPlainText().split(",")
                 if f.strip()
             ],
         }
@@ -143,5 +160,5 @@ class SettingsWindow(QDialog):
         # Refresh the timestamp label (the file was just written)
         self._update_last_modified()
 
-        logger.log_signal.emit("Settings saved successfully")
+        logger.success("Settings saved successfully")
         self.accept()

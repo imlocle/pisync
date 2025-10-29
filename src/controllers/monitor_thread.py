@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Set, Optional, Tuple
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread
 import paramiko
 import os
 from src.repositories.file_monitor_repository import FileMonitorRepository
@@ -8,16 +8,16 @@ from src.services.file_classifier_service import FileClassifierService
 from src.services.file_deletion_service import FileDeletionService
 from src.services.movie_service import MovieService
 from src.services.tv_service import TvService
+from src.utils.logging_signal import logger
 
 
 class MonitorThread(QThread):
-    log_signal = Signal(str)
-
     def __init__(
         self,
         watch_dir: str,
         pi_user: str,
         pi_ip: str,
+        pi_root_dir: str,
         pi_movies: str,
         pi_tv: str,
         file_exts: Set[str],
@@ -28,6 +28,7 @@ class MonitorThread(QThread):
         self.watch_dir = watch_dir
         self.pi_user = pi_user
         self.pi_ip = pi_ip
+        self.pi_root_dir = pi_root_dir
         self.pi_movies = pi_movies
         self.pi_tv = pi_tv
         self.file_exts = file_exts
@@ -44,12 +45,12 @@ class MonitorThread(QThread):
         try:
             # Establish sftp if not provided
             if self.sftp_client is None:
-                self.log_signal.emit(f"🔌 Connecting to {self.pi_ip}...")
+                logger.info(f"Connecting to {self.pi_ip}...")
                 self.ssh_client, self.sftp_client = self._connect_sftp(
                     self.pi_ip, self.pi_user
                 )
                 if not self.sftp_client:
-                    self.log_signal.emit("❌ SFTP connection failed; aborting monitor.")
+                    logger.error("SFTP connection failed; aborting monitor.")
                     return
             else:
                 # If we got sftp_client from main window, try to create an ssh client wrapper for cleanup later.
@@ -60,8 +61,16 @@ class MonitorThread(QThread):
                 except Exception:
                     pass
 
-            self.movie_service = MovieService(self.sftp_client)
-            self.tv_service = TvService(self.sftp_client)
+            self.movie_service = MovieService(
+                sftp=self.sftp_client,
+                watch_dir=self.watch_dir,
+                pi_root_dir=f"{self.pi_root_dir}/{self.pi_movies}",
+            )
+            self.tv_service = TvService(
+                sftp=self.sftp_client,
+                watch_dir=self.watch_dir,
+                pi_root_dir=self.pi_root_dir,
+            )
             classifier = FileClassifierService()
             deletion = FileDeletionService()
 
@@ -79,17 +88,15 @@ class MonitorThread(QThread):
             )
             self.file_monitor_repo.create_directories()
             self.file_monitor_repo.start_monitoring()
-            self.log_signal.emit(f"👀 Monitoring started on {self.watch_dir}")
 
             while self._running:
                 self.msleep(500)
 
             # Stop monitoring
             self.file_monitor_repo.stop_monitoring()
-            self.log_signal.emit("🛑 Monitor stopped")
 
         except Exception as e:
-            self.log_signal.emit(f"❌ MonitorThread error: {e}")
+            logger.error(f"MonitorThread error: {e}")
         finally:
             # cleanup: close sftp/ssh only if this thread created them
             try:
@@ -114,7 +121,7 @@ class MonitorThread(QThread):
             sftp = ssh.open_sftp()
             return ssh, sftp
         except Exception as e:
-            self.log_signal.emit(f"❌ SFTP connect failed: {e}")
+            logger.error(f"SFTP connect failed: {e}")
             return None, None
 
     def _pre_scan_and_transfer(self) -> None:
@@ -125,9 +132,9 @@ class MonitorThread(QThread):
          - For TV_shows -> upload folder structure via TvService
          - Skips hidden/system files
         """
-        root = os.path.expanduser("~/Transfers")
+        root = self.watch_dir
         if not os.path.isdir(root):
-            self.log_signal.emit("ℹ️ ~/Transfers not found, skipping pre-scan.")
+            logger.info(f"{root} not found, skipping pre-scan.")
             return
 
         count = 0
@@ -151,9 +158,7 @@ class MonitorThread(QThread):
                     try:
                         if self.movie_service.transfer_movie_folder(local_folder):
                             # delete local folder
-                            self.log_signal.emit(
-                                f"⬆️ Pre-scan transferred movie: {local_folder}"
-                            )
+                            logger.info(f"Pre-scan transferred movie: {local_folder}")
                             # deletion via repository deletion service if available
                             if self.file_monitor_repo:
                                 self.file_monitor_repo.deletion_service.delete_folder(
@@ -161,8 +166,8 @@ class MonitorThread(QThread):
                                 )
                             count += 1
                     except Exception as e:
-                        self.log_signal.emit(
-                            f"❌ Pre-scan movie transfer failed: {local_folder} - {e}\n"
+                        logger.error(
+                            f"Pre-scan movie transfer failed: {local_folder} - {e}\n"
                         )
 
             elif entry == "TV_shows":
@@ -174,9 +179,7 @@ class MonitorThread(QThread):
                     # transfer recursively using tv_service
                     try:
                         if self.tv_service.transfer_tv_folder(show_path):
-                            self.log_signal.emit(
-                                f"⬆️ Pre-scan transferred TV show: {show_path}"
-                            )
+                            logger.info(f"Pre-scan transferred TV show: {show_path}")
                             # delete only video files
                             if self.file_monitor_repo:
                                 for root_dir, _, files in os.walk(show_path):
@@ -190,9 +193,7 @@ class MonitorThread(QThread):
                                             )
                             count += 1
                     except Exception as e:
-                        self.log_signal.emit(
-                            f"❌ Pre-scan TV transfer failed: {show_path} - {e}"
-                        )
+                        logger.error(f"Pre-scan TV transfer failed: {show_path} - {e}")
             else:
                 # If someone dropped a folder directly under ~/Transfers (not Movies/TV_shows),
                 # try to classify and process accordingly.
@@ -220,8 +221,8 @@ class MonitorThread(QThread):
                                                 )
                                 count += 1
                     except Exception as e:
-                        self.log_signal.emit(
-                            f"❌ Pre-scan generic transfer failed: {entry_path} - {e}"
+                        logger.error(
+                            f"Pre-scan generic transfer failed: {entry_path} - {e}"
                         )
 
-        self.log_signal.emit(f"🔁 Pre-scan finished. Transferred {count} item(s).")
+        logger.info(f"Pre-scan finished. Transferred {count} item(s).")
