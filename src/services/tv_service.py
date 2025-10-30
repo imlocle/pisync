@@ -29,5 +29,5 @@ class TvService(BaseTransferService):
         try:
             self.transfer_folder(local_folder, remote_folder)
             return True
-        except Exception:
-            raise
+        except Exception as e:
+            return False

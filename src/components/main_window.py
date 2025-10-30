@@ -68,6 +68,7 @@ class MainWindow(QWidget):
         self.stop_btn = QPushButton(" Stop Monitoring")
         self.stop_btn.setEnabled(False)
         self.upload_all_btn = QPushButton("⬆️ Upload All")
+        self.upload_all_btn.setEnabled(False)
         self.refresh_btn = QPushButton("↻ Refresh")
         self.settings_btn = QPushButton("⚙️ Settings")
 
@@ -214,18 +215,20 @@ class MainWindow(QWidget):
         )
 
         self.monitor_thread.start()
-        logger.search(f"Monitor: Start: {self.settings.watch_dir}")
+        logger.start(f"Monitor: Start: {self.settings.watch_dir}")
         self.status_label.setText("🟢 Status: Monitoring: Active")
         self.start_btn.setEnabled(False)
+        self.upload_all_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)
 
     def stop_monitor(self) -> None:
         if self.monitor_thread:
             self.monitor_thread.stop()
             self.monitor_thread.wait()
-            logger.stop("Monitor: Stop")
+            logger.stop(f"Monitor: Stop: {self.settings.watch_dir}\n")
             self.status_label.setText("🛑 Status: Monitoring: Idle")
             self.start_btn.setEnabled(True)
+            self.upload_all_btn.setEnabled(False)
             self.stop_btn.setEnabled(False)
 
         # close UI SFTP if it exists and wasn't passed/closed by monitor thread
@@ -267,49 +270,17 @@ class MainWindow(QWidget):
 
     def transfer_existing_files(self) -> None:
         """Scan ~/Transfers for files and upload them to the Raspberry Pi before monitoring."""
-        transfers_dir = self.settings.watch_dir
-        if not os.path.exists(transfers_dir):
-            logger.info("No ~/Transfers folder found. Skipping pre-scan.")
+        if not os.path.exists(self.settings.watch_dir):
+            logger.info(
+                f"No {self.settings.watch_dir} folder found. Skipping pre-scan."
+            )
             return
 
-        logger.search("Scanning ~/Transfers for files to transfer...")
-        transferred_count = 0
-
+        logger.search(f"Scan: {self.settings.watch_dir} for files to transfer...")
         try:
-            # Ensure SFTP connection
-            if not self.pi_explorer.sftp:
-                logger.warn(
-                    "SFTP connection not available. Cannot transfer existing files."
-                )
-                return
-
-            for root, _, files in os.walk(transfers_dir):
-                for file in files:
-                    if file.startswith(".") or file in self.settings.skip_files:
-                        continue
-
-                    local_path = os.path.join(root, file)
-                    relative_path = os.path.relpath(local_path, transfers_dir)
-                    remote_path = os.path.join("/mnt/external/", relative_path)
-
-                    # Ensure remote directory exists
-                    remote_dir = os.path.dirname(remote_path)
-                    try:
-                        self.pi_explorer.sftp.stat(remote_dir)
-                    except IOError:
-                        self._make_remote_dirs(self.pi_explorer.sftp, remote_dir)
-
-                    # Upload file
-                    logger.info(f"Uploading: {local_path} → {remote_path}")
-                    self.pi_explorer.sftp.put(local_path, remote_path)
-                    transferred_count += 1
-
-            if transferred_count > 0:
-                logger.success(
-                    f"Completed transfer of {transferred_count} file(s) from ~/Transfers."
-                )
-            else:
-                logger.info("No valid files found to transfer in ~/Transfers.")
+            self.upload_all_btn.setEnabled(False)
+            self.monitor_thread.scan_and_transfer()
+            self.upload_all_btn.setEnabled(True)
         except Exception as e:
             logger.error(f"Error during pre-transfer: {e}")
 

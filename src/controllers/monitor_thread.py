@@ -124,7 +124,7 @@ class MonitorThread(QThread):
             logger.error(f"SFTP connect failed: {e}")
             return None, None
 
-    def _pre_scan_and_transfer(self) -> None:
+    def scan_and_transfer(self) -> None:
         """
         Scan ~/Transfers and upload existing files before enabling live monitoring.
         Behavior:
@@ -133,11 +133,11 @@ class MonitorThread(QThread):
          - Skips hidden/system files
         """
         root = self.watch_dir
+        logger.start(f"Scan: Start: {root}")
         if not os.path.isdir(root):
             logger.info(f"{root} not found, skipping pre-scan.")
             return
 
-        count = 0
         for top, dirs, files in os.walk(root):
             # We want to process at top-level folder level (e.g. Movies/<movie_folder> or TV_shows/<show>/...)
             # Skip nested traversal here; only handle actionable items when we discover folders/files
@@ -149,28 +149,27 @@ class MonitorThread(QThread):
                 continue
             entry_path = os.path.join(root, entry)
             # If top-level is Movies or TV_shows, iterate inside those
-            if entry == "Movies":
+            if entry == self.pi_movies:
                 # iterate each movie folder
                 for movie_folder in sorted(os.listdir(entry_path)):
                     if movie_folder.startswith("."):
                         continue
                     local_folder = os.path.join(entry_path, movie_folder)
                     try:
+                        logger.info(f"Scan: Movies: {movie_folder}")
                         if self.movie_service.transfer_movie_folder(local_folder):
                             # delete local folder
-                            logger.info(f"Pre-scan transferred movie: {local_folder}")
                             # deletion via repository deletion service if available
                             if self.file_monitor_repo:
                                 self.file_monitor_repo.deletion_service.delete_folder(
                                     local_folder
                                 )
-                            count += 1
                     except Exception as e:
                         logger.error(
                             f"Pre-scan movie transfer failed: {local_folder} - {e}\n"
                         )
 
-            elif entry == "TV_shows":
+            elif entry == self.pi_tv:
                 # iterate each show (show -> seasons -> files)
                 for show in sorted(os.listdir(entry_path)):
                     if show.startswith("."):
@@ -178,8 +177,8 @@ class MonitorThread(QThread):
                     show_path = os.path.join(entry_path, show)
                     # transfer recursively using tv_service
                     try:
+                        logger.info(f"Scan: TV show: {show}")
                         if self.tv_service.transfer_tv_folder(show_path):
-                            logger.info(f"Pre-scan transferred TV show: {show_path}")
                             # delete only video files
                             if self.file_monitor_repo:
                                 for root_dir, _, files in os.walk(show_path):
@@ -191,9 +190,8 @@ class MonitorThread(QThread):
                                             self.file_monitor_repo.deletion_service.delete_file(
                                                 os.path.join(root_dir, f)
                                             )
-                            count += 1
                     except Exception as e:
-                        logger.error(f"Pre-scan TV transfer failed: {show_path} - {e}")
+                        logger.error(f"Scan: TV shows: Failed: {show_path} - {e}")
             else:
                 # If someone dropped a folder directly under ~/Transfers (not Movies/TV_shows),
                 # try to classify and process accordingly.
@@ -206,7 +204,6 @@ class MonitorThread(QThread):
                                     self.file_monitor_repo.deletion_service.delete_folder(
                                         entry_path
                                     )
-                                count += 1
                         else:
                             if self.tv_service.transfer_tv_folder(entry_path):
                                 if self.file_monitor_repo:
@@ -219,10 +216,7 @@ class MonitorThread(QThread):
                                                 self.file_monitor_repo.deletion_service.delete_file(
                                                     os.path.join(root_dir, f)
                                                 )
-                                count += 1
                     except Exception as e:
-                        logger.error(
-                            f"Pre-scan generic transfer failed: {entry_path} - {e}"
-                        )
+                        logger.error(f"Scan: Generic: Failed: {entry_path} - {e}")
 
-        logger.info(f"Pre-scan finished. Transferred {count} item(s).")
+        logger.success(f"Scan: Complete: {root}")
