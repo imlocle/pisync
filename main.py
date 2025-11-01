@@ -1,28 +1,39 @@
-from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QIcon
 import sys
+from PySide6.QtWidgets import QApplication
 from src.components.main_window import MainWindow
-from src.utils.helper import get_path
+from src.components.splash_screen import SplashScreen
+from src.utils.helper import get_path, rounded_icon
 
 
 def main():
     app = QApplication(sys.argv)
+    app.setApplicationName("PiSync")
+    app.setApplicationVersion("1.0.0")
 
+    # ---- STYLESHEET ----
     stylesheet_path = get_path("assets/styles/styles.qss")
     try:
         with open(stylesheet_path, "r") as f:
             app.setStyleSheet(f.read())
     except FileNotFoundError:
-        print("⚠️ No stylesheet found — using default theme.")
+        print("No stylesheet found — using default theme.")
 
-    try:
-        app.setWindowIcon(QIcon("assets/icons/pisync_logo.png"))
-    except FileNotFoundError:
-        print("⚠️ Logo not found — using default icon.")
+    # ---- SPLASH ----
+    logo_path = get_path("assets/icons/pisync_logo.png")
+    splash = SplashScreen(str(logo_path), duration=2500)
+    splash.show()
 
-    # Main window
+    # ---- ICON (rounded) ----
+    app.setWindowIcon(rounded_icon(str(logo_path), 15))
+
+    # ---- MAIN WINDOW ----
     window = MainWindow()
-    window.show()
+
+    def start_main():
+        splash.close()
+        window.show()
+
+    splash.show_and_wait(start_main)
     sys.exit(app.exec())
 
 

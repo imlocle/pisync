@@ -14,9 +14,12 @@ class SettingsConfig(BaseModel):
     pi_movies: str = ""
     pi_tv: str = ""
 
+    watch_dir: str = os.path.expanduser("~/Transfers")
+    ssh_key_path: str = os.path.expanduser("~/.ssh/id_rsa")
+
     file_exts: set[str] = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".srt"}
     skip_files: set[str] = {".DS_Store", "Thumbs.db", ".Trashes"}
-    watch_dir: str = os.path.expanduser("~/Transfers")
+    last_modified: str = ""
 
     @classmethod
     def from_json(cls, data: dict) -> "SettingsConfig":
@@ -39,7 +42,7 @@ class Settings:
             local_config_path = Path.home() / f".{SOFTARE_NAME}" / CONFIG_JSON
             if local_config_path.exists() and local_config_path.is_file():
                 config_data = cls._load_config(local_config_path)
-                logger.success(f"Config Loaded: {local_config_path}")
+                logger.success(f"Config: Loaded: {local_config_path}")
             else:
                 # Determine config file path for loading
                 if getattr(sys, "_MEIPASS", False):
@@ -99,8 +102,16 @@ class Settings:
         return self.config.skip_files
 
     @property
+    def ssh_key_path(self):
+        return self.config.ssh_key_path
+
+    @property
     def watch_dir(self):
         return self.config.watch_dir
+
+    @property
+    def last_modified(self):
+        return self.config.last_modified
 
     def save_config(self, config_data: dict):
         # Determine save path in user directory
@@ -119,9 +130,8 @@ class Settings:
         try:
             with open(config_path, "w") as f:
                 json.dump(save_data, f, indent=4)
-            logger.success(f"Successfully saved config to {config_path}")
         except Exception as e:
-            logger.error(f"Error saving config to {config_path}: {e}")
+            logger.error(f"Settings: Failed: {config_path}: {e}")
 
     def is_valid(self) -> bool:
         """Check if critical settings are non-empty."""

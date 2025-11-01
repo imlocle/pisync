@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Optional, List
+from paramiko import SFTPClient
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -13,8 +14,6 @@ from PySide6.QtCore import Signal, Qt, QUrl
 from PySide6.QtGui import QIcon, QDragEnterEvent, QDropEvent, QPainter, QColor, QFont
 import os
 import shutil
-import paramiko
-from src.utils.logging_signal import logger
 
 
 class FileExplorerWidget(QWidget):
@@ -27,16 +26,15 @@ class FileExplorerWidget(QWidget):
         self,
         root_path: str,
         is_remote: bool = False,
-        sftp: Optional[paramiko.SFTPClient] = None,
+        sftp: Optional[SFTPClient] = None,
         title: str = "Explorer",
     ) -> None:
         super().__init__()
         self.title = title
-        self.log_signal = logger.log_signal
         self.root_path: str = root_path
         self.current_path: str = root_path
         self.is_remote: bool = is_remote
-        self.sftp: Optional[paramiko.SFTPClient] = sftp
+        self.sftp: Optional[SFTPClient] = sftp
         self.drag_over: bool = False  # visual feedback flag
 
         layout: QVBoxLayout = QVBoxLayout(self)

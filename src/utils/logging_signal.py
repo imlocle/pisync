@@ -36,7 +36,4 @@ class Logger(QObject):
         self.log_signal.emit(msg)
 
 
-# ⬆️ 🔁 🚀 🔄
-
-
-logger = Logger()  # Singleton instance for global use
+logger = Logger()

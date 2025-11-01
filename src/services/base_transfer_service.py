@@ -49,19 +49,36 @@ class BaseTransferService:
         Recursively upload local_folder (all files) into remote_folder preserving
         subpaths relative to local_folder.
         """
+
         local_folder = os.path.abspath(local_folder)
+
+        def progress_callback(transferred_bytes, total_bytes):
+            progress = int((transferred_bytes / total_bytes) * 100)
+            if progress % 5 == 0:
+                if progress > 100:
+                    logger.progress_signal.emit(100)
+                else:
+                    logger.progress_signal.emit(progress)
 
         for root, _, files in os.walk(local_folder):
             for f in files:
                 if skip_hidden and (f.startswith(".") or f.startswith("._")):
                     continue
+
                 local_file = os.path.join(root, f)
                 rel = os.path.relpath(local_file, local_folder)
                 remote_file = os.path.join(remote_folder, rel).replace("\\", "/")
                 remote_dir = os.path.dirname(remote_file)
                 self.ensure_remote_directory(remote_dir)
-                logger.start(f"Transfer: Start: File: {local_file}")
-                logger.upload(f"Transfer: Start: Upload: {remote_file}")
-                self.sftp.put(local_file, remote_file)
-                logger.success(f"Transfer: Completed: Upload: {remote_file}")
-                self.file_deletion_service.delete_file(local_file)
+
+                try:
+                    logger.progress_signal.emit(0)
+                    logger.upload(f"Transfer: Start: File: {local_file}")
+                    self.sftp.put(local_file, remote_file, callback=progress_callback)
+                    logger.success(f"Transfer: Uploaded: File: {local_file}")
+                    self.file_deletion_service.delete_file(local_file)
+                    logger.progress_signal.emit(100)
+                except Exception as e:
+                    logger.error(f"Failed to upload {local_file}: {e}")
+                    logger.progress_signal.emit(0)
+                    continue

@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 from src.utils.logging_signal import logger
+from PySide6.QtGui import QPixmap, QPainter, QIcon
+from PySide6.QtCore import Qt
 
 
 def get_path(path_base: str) -> Path:
@@ -20,7 +22,6 @@ def get_path(path_base: str) -> Path:
     if getattr(sys, "_MEIPASS", False):
         base_path = Path(sys._MEIPASS)
         full_path = base_path / path_base
-        logger.log_signal.emit(f"Using bundled path: {full_path}")
         return full_path
     else:
         # In development, use the directory containing main.py as the base
@@ -30,12 +31,26 @@ def get_path(path_base: str) -> Path:
                 raise FileNotFoundError("main.py not found in current directory")
             base_path = main_script.parent
             full_path = base_path / path_base
-            logger.log_signal.emit(f"Using development path: {full_path}")
             return full_path
         except (FileNotFoundError, Exception) as e:
-            logger.log_signal.emit(f"Error determining development path: {e}")
+            logger.error(f"Error determining development path: {e}")
             # Fallback to current file's parent directory as a last resort
             base_path = Path(__file__).parent
             full_path = base_path / path_base
-            logger.log_signal.emit(f"Fallback to current file path: {full_path}")
+            logger.info(f"Fallback to current file path: {full_path}")
             return full_path
+
+
+def rounded_icon(path: str, radius: int = 15) -> QIcon:
+    pix = QPixmap(path)
+    size = pix.size()
+    rounded = QPixmap(size)
+    rounded.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(rounded)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setBrush(pix)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.drawRoundedRect(pix.rect(), radius, radius)
+    painter.end()
+    return QIcon(rounded)

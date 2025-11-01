@@ -1,3 +1,27 @@
+/* -------------------------------------------------
+   SPLASH SCREEN – rounded corners + shadow
+   ------------------------------------------------- */
+QSplashScreen {
+    background: transparent;          /* let the pixmap show through */
+    border-radius: 15px;              /* <-- YOUR 15px radius */
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+/* Optional: drop-shadow (works on macOS/Windows/Linux) */
+QSplashScreen {
+    /* the pixmap will be drawn inside the widget */
+    /* we use a graphics effect on the widget itself */
+}
+
+/* -------------------------------------------------
+   APP ICON – rounded in taskbar / title bar
+   ------------------------------------------------- */
+QMainWindow, QDialog {
+    /* not needed for the icon itself, but keeps window clean */
+}
+
+/* The icon itself is set in Python (see step 3) */
+
 QWidget {
     background-color: #1e1e1e;
     color: #f0f0f0;

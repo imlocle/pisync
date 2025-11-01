@@ -41,16 +41,14 @@ Welcome to **PiSync**, a Python-based application designed to automate the trans
    pyinstaller --noconfirm --onedir --windowed \
      -n "PiSync" \
      --icon="assets/icons/pisync_logo.png" \
-     --add-data="assets/icons/pisync_logo.png:assets/icons" \
-     --add-data="assets/icons/play_icon.svg:assets/icons" \
-     --add-data="assets/icons/stop_icon.svg:assets/icons" \
-     --add-data="assets/styles/styles.qss:assets/styles" \
-     --add-data="ui/controllers/monitor_thread.py:ui/controllers" \
-     --add-data="ui/components/file_explorer_widget.py:ui/components" \
-     --add-data="ui/components/main_window.py:ui/components" \
-     --add-data="ui/components/settings_window.py:ui/components" \
+     --add-data="assets:assets" \
      --add-data="src/config/settings.py:src/config" \
+     --add-data="src/controllers/monitor_thread.py:src/controllers" \
+     --add-data="src/components/main_window.py:src/components" \
+     --add-data="src/components/settings_window.py:src/components" \
+     --add-data="src/components/splash_screen.py:src/components" \
      --add-data="src/utils/logging_signal.py:src/utils" \
+     --add-data="src/widgets/file_explorer_widget.py:src/widgets" \
      main.py
    ```
 

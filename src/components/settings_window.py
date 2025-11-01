@@ -1,3 +1,4 @@
+from datetime import datetime
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
@@ -13,6 +14,7 @@ from PySide6.QtCore import QDateTime, Qt
 from pathlib import Path
 
 from src.config.settings import Settings, SettingsConfig
+from src.services.connection_manager_service import ConnectionManagerService
 from src.utils.constants import CONFIG_JSON, SOFTARE_NAME
 from src.utils.logging_signal import logger
 
@@ -20,30 +22,80 @@ from src.utils.logging_signal import logger
 class SettingsWindow(QDialog):
     """Settings dialog - now also displays the last-modified date of the config file."""
 
-    def __init__(self, settings: Settings):
+    def __init__(
+        self, settings: Settings, connection_manager_service: ConnectionManagerService
+    ):
         super().__init__()
-        self.settings = settings
         self.setWindowTitle(f"{SOFTARE_NAME} Settings")
-        self.setMinimumSize(420, 560)
+        self.setMinimumSize(420, 650)
 
-        # ------------------------------------------------------------------
-        # Main layout
-        # ------------------------------------------------------------------
+        self.settings = settings
+        self.connection_manager_service = connection_manager_service
+
+        # === 1. Layout Setup ===
         main_layout = QVBoxLayout(self)
+        self._setup_form(main_layout)
+        self._setup_labels(main_layout)
+        self._setup_buttons(main_layout)
 
-        # ------------------------------------------------------------------
-        # Form for the editable fields
-        # ------------------------------------------------------------------
+        # === 2. Connect Signals ===
+        self._setup_connections()
+
+    def save_settings(self):
+        """Collect UI values, write the config, and refresh the date."""
+
+        config_data = {
+            "pi_user": self.pi_user_input.text().strip(),
+            "pi_ip": self.pi_ip_input.text().strip(),
+            "pi_root_dir": self.pi_root_dir_input.text().rstrip("/").strip(),
+            "pi_movies": self.pi_movies_input.text().strip(),
+            "pi_tv": self.pi_tv_input.text().strip(),
+            "watch_dir": self.watch_dir_input.text().rstrip("/").strip(),
+            "ssh_key_path": self.ssh_key_path.text().strip(),
+            "file_exts": [
+                ext.strip()
+                for ext in self.file_exts_input.toPlainText().split(",")
+                if ext.strip()
+            ],
+            "skip_files": [
+                f.strip()
+                for f in self.skip_files_input.toPlainText().split(",")
+                if f.strip()
+            ],
+            "last_modified": datetime.now().strftime("%Y-%m-%d %I:%M:%S %p"),
+        }
+
+        self.settings.save_config(config_data)
+        self.settings.config = SettingsConfig.from_json(config_data)
+
+        logger.success("Settings: Saved")
+        self.accept()
+
+    def test_connection(self):
+        if self.connection_manager_service.test_connection():
+            self.connection_status_label.setText("Connection: ✅")
+            self.connection_status_label.setStyleSheet("color: green;")
+        else:
+            self.connection_status_label.setText("Connection: ❌")
+            self.connection_status_label.setStyleSheet("color: red;")
+
+    def _setup_connections(self):
+        self.save_btn.clicked.connect(self.save_settings)
+        self.cancel_btn.clicked.connect(self.reject)
+        self.test_connection_btn.clicked.connect(self.test_connection)
+
+    def _setup_form(self, layout: QVBoxLayout) -> None:
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
         # ---- Pi connection ------------------------------------------------
-        self.pi_user_input = QLineEdit(settings.pi_user)
-        self.pi_ip_input = QLineEdit(settings.pi_ip)
-        self.pi_root_dir_input = QLineEdit(settings.pi_root_dir)
-        self.pi_movies_input = QLineEdit(settings.pi_movies)
-        self.pi_tv_input = QLineEdit(settings.pi_tv)
-        self.watch_dir_input = QLineEdit(settings.watch_dir)
+        self.pi_user_input = QLineEdit(self.settings.pi_user)
+        self.pi_ip_input = QLineEdit(self.settings.pi_ip)
+        self.pi_root_dir_input = QLineEdit(self.settings.pi_root_dir)
+        self.pi_movies_input = QLineEdit(self.settings.pi_movies)
+        self.pi_tv_input = QLineEdit(self.settings.pi_tv)
+        self.watch_dir_input = QLineEdit(self.settings.watch_dir)
+        self.ssh_key_path = QLineEdit(self.settings.ssh_key_path)
 
         # Set minimum width for text inputs (e.g., 300 pixels)
         for input_field in [
@@ -53,6 +105,7 @@ class SettingsWindow(QDialog):
             self.pi_movies_input,
             self.pi_tv_input,
             self.watch_dir_input,
+            self.ssh_key_path,
         ]:
             input_field.setMinimumWidth(300)
 
@@ -62,17 +115,18 @@ class SettingsWindow(QDialog):
         form.addRow("Pi Movies Path:", self.pi_movies_input)
         form.addRow("Pi TV Path:", self.pi_tv_input)
         form.addRow("Local Watch Directory:", self.watch_dir_input)
+        form.addRow("Local SSH Key Path:", self.ssh_key_path)
 
         # ---- File extensions / skip files --------------------------------
-        self.file_exts_input = QTextEdit(", ".join(sorted(settings.file_exts)))
+        self.file_exts_input = QTextEdit(", ".join(sorted(self.settings.file_exts)))
         self.file_exts_input.setMaximumHeight(80)
         self.file_exts_input.setAcceptRichText(False)
-        self.file_exts_input.setWordWrapMode(QTextOption.WrapMode.NoWrap)
+        self.file_exts_input.setWordWrapMode(QTextOption.WrapMode.WordWrap)
 
-        self.skip_files_input = QTextEdit(", ".join(sorted(settings.skip_files)))
+        self.skip_files_input = QTextEdit(", ".join(sorted(self.settings.skip_files)))
         self.skip_files_input.setMaximumHeight(80)
         self.skip_files_input.setAcceptRichText(False)
-        self.skip_files_input.setWordWrapMode(QTextOption.WrapMode.NoWrap)
+        self.skip_files_input.setWordWrapMode(QTextOption.WrapMode.WordWrap)
 
         self.file_exts_input.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAsNeeded
@@ -84,81 +138,41 @@ class SettingsWindow(QDialog):
         form.addRow("File Extensions (comma separated):", self.file_exts_input)
         form.addRow("Skip Files (comma separated):", self.skip_files_input)
 
-        main_layout.addLayout(form)
+        layout.addLayout(form)
 
-        # ------------------------------------------------------------------
-        # Last-modified date label (read-only)
-        # ------------------------------------------------------------------
-        self.last_mod_label = QLabel()
+    def _setup_labels(self, layout: QVBoxLayout):
+        self.last_mod_label = QLabel("Last Modified: Config file not yet created")
         self.last_mod_label.setStyleSheet("color: #555; font-style: italic;")
-        self._update_last_modified()
-        main_layout.addWidget(self.last_mod_label)
-
-        # ------------------------------------------------------------------
-        # Buttons
-        # ------------------------------------------------------------------
-        btn_layout = QHBoxLayout()
-        save_btn = QPushButton("Save")
-        cancel_btn = QPushButton("Cancel")
-        btn_layout.addStretch()
-        btn_layout.addWidget(save_btn)
-        btn_layout.addWidget(cancel_btn)
-        main_layout.addLayout(btn_layout)
-
-        # ------------------------------------------------------------------
-        # Connections
-        # ------------------------------------------------------------------
-        save_btn.clicked.connect(self.save_settings)
-        cancel_btn.clicked.connect(self.reject)
-
-    # ----------------------------------------------------------------------
-    # Helper: refresh the “last modified” text
-    # ----------------------------------------------------------------------
-    def _update_last_modified(self):
-        """Show the modification timestamp of the *active* config file."""
-        # The config is always saved to ~/.PiSync/config.json
-        cfg_path = Path.home() / f".{SOFTARE_NAME}" / CONFIG_JSON
-
-        if cfg_path.is_file():
-            mtime = cfg_path.stat().st_mtime
-            dt = QDateTime.fromSecsSinceEpoch(int(mtime))
-            pretty = dt.toString("yyyy-MM-dd hh:mm:ss")
-            self.last_mod_label.setText(f"Config last modified: {pretty}")
+        if self.settings.last_modified:
+            self.last_mod_label.setText(f"Last Modified: {self.settings.last_modified}")
         else:
-            self.last_mod_label.setText("Config file not yet created")
+            self.last_mod_label.setText("Last Modified: Config file not yet created")
+        layout.addWidget(self.last_mod_label)
 
-    # ----------------------------------------------------------------------
-    # Save button handler
-    # ----------------------------------------------------------------------
-    def save_settings(self):
-        """Collect UI values, write the config, and refresh the date."""
-        config_data = {
-            "pi_user": self.pi_user_input.text().strip(),
-            "pi_ip": self.pi_ip_input.text().strip(),
-            "pi_root_dir": self.pi_root_dir_input.text().rstrip("/").strip(),
-            "pi_movies": self.pi_movies_input.text().strip(),
-            "pi_tv": self.pi_tv_input.text().strip(),
-            "watch_dir": self.watch_dir_input.text().strip(),
-            "file_exts": [
-                ext.strip()
-                for ext in self.file_exts_input.toPlainText().split(",")
-                if ext.strip()
-            ],
-            "skip_files": [
-                f.strip()
-                for f in self.skip_files_input.toPlainText().split(",")
-                if f.strip()
-            ],
-        }
+        self.connection_status_label = QLabel("Connection: ")
+        self.connection_status_label.setStyleSheet("color: #555; font-style: italic;")
+        layout.addWidget(self.connection_status_label)
 
-        # Persist to ~/.PiSync/config.json
-        self.settings.save_config(config_data)
+    # def _update_last_modified(self):
+    #     """Show the modification timestamp of the *active* config file."""
+    #     # The config is always saved to ~/.PiSync/config.json
+    #     cfg_path = Path.home() / f".{SOFTARE_NAME}" / CONFIG_JSON
 
-        # Update the singleton *in-memory* model
-        self.settings.config = SettingsConfig.from_json(config_data)
+    #     if cfg_path.is_file():
+    #         mtime = cfg_path.stat().st_mtime
+    #         dt = QDateTime.fromSecsSinceEpoch(int(mtime))
+    #         pretty = dt.toString("yyyy-MM-dd hh:mm:ss")
+    #         self.last_mod_label.setText(f"Last Modified: {pretty}")
+    #     else:
+    #         self.last_mod_label.setText("Last Modified: Config file not yet created")
 
-        # Refresh the timestamp label (the file was just written)
-        self._update_last_modified()
-
-        logger.success("Settings saved successfully")
-        self.accept()
+    def _setup_buttons(self, layout: QVBoxLayout):
+        btn_layout = QHBoxLayout()
+        self.test_connection_btn = QPushButton("Test Connection")
+        self.save_btn = QPushButton("Save")
+        self.cancel_btn = QPushButton("Cancel")
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.test_connection_btn)
+        btn_layout.addWidget(self.save_btn)
+        btn_layout.addWidget(self.cancel_btn)
+        layout.addLayout(btn_layout)
