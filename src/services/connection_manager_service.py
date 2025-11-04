@@ -39,10 +39,14 @@ class ConnectionManagerService:
                 logger.start(f"Connection: Start: {self.settings.pi_ip}")
                 return True
             except Exception as e:
-                logger.error(f"Connection: Failed: {e}")
+                retries += 1
+                logger.error(f"Connection: Failed: Retries: {retries}: Error: {e}\n")
+                if retries > 3:
+                    logger.error(
+                        f"Connection: Failed: Retries: {retries}: Error: Reached the limit of retries. Please check your settings."
+                    )
                 self.ssh_client = None
                 self.sftp_client = None
-                retries += 1
                 sleep(3)
         return False
 

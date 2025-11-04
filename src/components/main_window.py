@@ -110,12 +110,32 @@ class MainWindow(QWidget):
 
     def refresh_explorers(self) -> None:
         """Manual refresh for both explorers."""
-        self.watch_explorer.root_path = self.settings.watch_dir
-        self.watch_explorer.refresh()
 
-        self.pi_explorer.root_path = self.settings.pi_root_dir
+        self.stop_monitor()
+        self.connection_manager_service.connect()
+
+        if self.connection_manager_service.is_connected():
+            self.watch_explorer = FileExplorerWidget(
+                settings=self.settings,
+                root_path=self.settings.watch_dir,
+                title="Watch Directory",
+            )
+
+            try:
+                self.pi_explorer = FileExplorerWidget(
+                    settings=self.settings,
+                    root_path=self.settings.pi_root_dir,
+                    title="Raspberry Pi Directory",
+                    is_remote=True,
+                    sftp=self.connection_manager_service.sftp_client,
+                )
+            except Exception as e:
+                logger.error(f"Explorers: Refreshed: Failed: {e}")
+                return
+
+        self.watch_explorer.refresh()
         self.pi_explorer.refresh()
-        logger.info("Refreshed both explorers.")
+        logger.success("Explorers: Refreshed: Complete")
 
     def handle_file_open(self, path: str) -> None:
         """Handle double-click on file event (placeholder)."""
@@ -125,6 +145,9 @@ class MainWindow(QWidget):
         if self.monitor_thread and self.monitor_thread.isRunning():
             logger.warn("Already monitoring.")
             return
+
+        if not self.connection_manager_service.is_connected():
+            self.connection_manager_service.connect()
 
         self.monitor_thread.start()
         logger.start(f"Monitor: Start: {self.settings.watch_dir}")
@@ -141,9 +164,9 @@ class MainWindow(QWidget):
             logger.stop(f"Monitor: Stop: {self.settings.watch_dir}")
             self.status_label.setText("🛑 Status: Monitoring: Idle")
 
-            self.start_btn.setEnabled(True)
-            self.stop_btn.setEnabled(False)
-            self.upload_all_btn.setEnabled(False)
+        self.start_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        self.upload_all_btn.setEnabled(False)
 
         self.connection_manager_service.close()
 
@@ -213,13 +236,15 @@ class MainWindow(QWidget):
     def _setup_splitter(self, layout: QVBoxLayout) -> None:
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        self.watch_explorer: FileExplorerWidget = FileExplorerWidget(
+        self.watch_explorer = FileExplorerWidget(
+            settings=self.settings,
             root_path=self.settings.watch_dir,
             title="Watch Directory",
         )
 
         try:
             self.pi_explorer = FileExplorerWidget(
+                settings=self.settings,
                 root_path=self.settings.pi_root_dir,
                 title="Raspberry Pi Files",
                 is_remote=True,

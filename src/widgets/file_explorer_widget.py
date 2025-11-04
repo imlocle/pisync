@@ -15,6 +15,8 @@ from PySide6.QtGui import QIcon, QDragEnterEvent, QDropEvent, QPainter, QColor, 
 import os
 import shutil
 
+from src.config.settings import Settings
+
 
 class FileExplorerWidget(QWidget):
     """A reusable file explorer widget for both local and remote (SFTP) directories."""
@@ -24,17 +26,20 @@ class FileExplorerWidget(QWidget):
 
     def __init__(
         self,
+        settings: Settings,
         root_path: str,
         is_remote: bool = False,
         sftp: Optional[SFTPClient] = None,
         title: str = "Explorer",
     ) -> None:
         super().__init__()
-        self.title = title
+        self.settings: Settings = settings
         self.root_path: str = root_path
-        self.current_path: str = root_path
         self.is_remote: bool = is_remote
         self.sftp: Optional[SFTPClient] = sftp
+        self.title: str = title
+
+        self.current_path: str = root_path
         self.drag_over: bool = False  # visual feedback flag
 
         layout: QVBoxLayout = QVBoxLayout(self)
@@ -80,7 +85,7 @@ class FileExplorerWidget(QWidget):
                 if not (
                     e.startswith(".")
                     or e.startswith("._")
-                    or e in {".DS_Store", ".Trashes", "Thumbs.db"}
+                    or e in self.settings.skip_files
                 )
             ]
 

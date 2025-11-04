@@ -10,12 +10,11 @@ from PySide6.QtWidgets import (
     QFormLayout,
 )
 from PySide6.QtGui import QTextOption
-from PySide6.QtCore import QDateTime, Qt
-from pathlib import Path
+from PySide6.QtCore import Qt
 
 from src.config.settings import Settings, SettingsConfig
 from src.services.connection_manager_service import ConnectionManagerService
-from src.utils.constants import CONFIG_JSON, SOFTARE_NAME
+from src.utils.constants import SOFTARE_NAME
 from src.utils.logging_signal import logger
 
 
@@ -40,6 +39,9 @@ class SettingsWindow(QDialog):
 
         # === 2. Connect Signals ===
         self._setup_connections()
+
+        # === 3. Test SSH Connection ===
+        self.test_connection()
 
     def save_settings(self):
         """Collect UI values, write the config, and refresh the date."""
@@ -74,10 +76,8 @@ class SettingsWindow(QDialog):
     def test_connection(self):
         if self.connection_manager_service.test_connection():
             self.connection_status_label.setText("Connection: ✅")
-            self.connection_status_label.setStyleSheet("color: green;")
         else:
             self.connection_status_label.setText("Connection: ❌")
-            self.connection_status_label.setStyleSheet("color: red;")
 
     def _setup_connections(self):
         self.save_btn.clicked.connect(self.save_settings)
@@ -141,7 +141,7 @@ class SettingsWindow(QDialog):
         layout.addLayout(form)
 
     def _setup_labels(self, layout: QVBoxLayout):
-        self.last_mod_label = QLabel("Last Modified: Config file not yet created")
+        self.last_mod_label = QLabel()
         self.last_mod_label.setStyleSheet("color: #555; font-style: italic;")
         if self.settings.last_modified:
             self.last_mod_label.setText(f"Last Modified: {self.settings.last_modified}")
@@ -152,19 +152,6 @@ class SettingsWindow(QDialog):
         self.connection_status_label = QLabel("Connection: ")
         self.connection_status_label.setStyleSheet("color: #555; font-style: italic;")
         layout.addWidget(self.connection_status_label)
-
-    # def _update_last_modified(self):
-    #     """Show the modification timestamp of the *active* config file."""
-    #     # The config is always saved to ~/.PiSync/config.json
-    #     cfg_path = Path.home() / f".{SOFTARE_NAME}" / CONFIG_JSON
-
-    #     if cfg_path.is_file():
-    #         mtime = cfg_path.stat().st_mtime
-    #         dt = QDateTime.fromSecsSinceEpoch(int(mtime))
-    #         pretty = dt.toString("yyyy-MM-dd hh:mm:ss")
-    #         self.last_mod_label.setText(f"Last Modified: {pretty}")
-    #     else:
-    #         self.last_mod_label.setText("Last Modified: Config file not yet created")
 
     def _setup_buttons(self, layout: QVBoxLayout):
         btn_layout = QHBoxLayout()
