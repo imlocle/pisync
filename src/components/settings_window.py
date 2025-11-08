@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt
 
 from src.config.settings import Settings, SettingsConfig
 from src.services.connection_manager_service import ConnectionManagerService
-from src.utils.constants import SOFTARE_NAME
+from src.utils.constants import SOFTWARE_NAME
 from src.utils.logging_signal import logger
 
 
@@ -22,14 +22,14 @@ class SettingsWindow(QDialog):
     """Settings dialog - now also displays the last-modified date of the config file."""
 
     def __init__(
-        self, settings: Settings, connection_manager_service: ConnectionManagerService
+        self,
+        settings: Settings,
     ):
         super().__init__()
-        self.setWindowTitle(f"{SOFTARE_NAME} Settings")
+        self.setWindowTitle(f"{SOFTWARE_NAME} Settings")
         self.setMinimumSize(420, 650)
 
         self.settings = settings
-        self.connection_manager_service = connection_manager_service
 
         # === 1. Layout Setup ===
         main_layout = QVBoxLayout(self)
@@ -74,7 +74,9 @@ class SettingsWindow(QDialog):
         self.accept()
 
     def test_connection(self):
-        if self.connection_manager_service.test_connection():
+        connection_manager_service = ConnectionManagerService(self.settings)
+
+        if connection_manager_service.test_connection():
             self.connection_status_label.setText("Connection: ✅")
         else:
             self.connection_status_label.setText("Connection: ❌")

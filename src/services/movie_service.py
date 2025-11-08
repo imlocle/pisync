@@ -1,7 +1,6 @@
 from __future__ import annotations
 import os
 from src.services.base_transfer_service import BaseTransferService
-from src.utils.logging_signal import logger
 
 
 class MovieService(BaseTransferService):
@@ -17,7 +16,6 @@ class MovieService(BaseTransferService):
         """
         local_folder = os.path.abspath(local_folder)
         if not os.path.isdir(local_folder):
-            logger.warn("local_folder must be a directory")
             return False
 
         folder_name = os.path.basename(local_folder.rstrip("/"))

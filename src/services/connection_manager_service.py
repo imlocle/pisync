@@ -53,7 +53,7 @@ class ConnectionManagerService:
     def is_connected(self) -> bool:
         return self.ssh_client is not None and self.sftp_client is not None
 
-    def close(self):
+    def disconnect(self):
         """Close SSH + SFTP connections."""
         if self.sftp_client:
             self.sftp_client.close()
@@ -62,7 +62,9 @@ class ConnectionManagerService:
             self.ssh_client.close()
             self.ssh_client = None
 
-        logger.stop("Connection: Stop\n")
+        logger.stop(
+            f"Connection: Stop: SSH: {self.ssh_client}: SFTP: {self.sftp_client}\n"
+        )
 
     def test_connection(self):
         """Temporary connection just for testing."""

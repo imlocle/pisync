@@ -55,10 +55,7 @@ class BaseTransferService:
         def progress_callback(transferred_bytes, total_bytes):
             progress = int((transferred_bytes / total_bytes) * 100)
             if progress % 5 == 0:
-                if progress > 100:
-                    logger.progress_signal.emit(100)
-                else:
-                    logger.progress_signal.emit(progress)
+                logger.progress_signal.emit(progress)
 
         for root, _, files in os.walk(local_folder):
             for f in files:
@@ -77,7 +74,6 @@ class BaseTransferService:
                     self.sftp.put(local_file, remote_file, callback=progress_callback)
                     logger.success(f"Transfer: Uploaded: File: {local_file}")
                     self.file_deletion_service.delete_file(local_file)
-                    logger.progress_signal.emit(100)
                 except Exception as e:
                     logger.error(f"Failed to upload {local_file}: {e}")
                     logger.progress_signal.emit(0)

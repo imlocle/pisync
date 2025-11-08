@@ -62,16 +62,19 @@ class FileExplorerWidget(QWidget):
         self.back_btn.clicked.connect(self.go_back)
         self.list_widget.itemDoubleClicked.connect(self.navigate)
 
-        # Enable drag-and-drop only for local explorer
         if not self.is_remote:
             self.setAcceptDrops(True)
+            self.list_widget.setAcceptDrops(True)
 
         self.refresh()
 
-    def refresh(self) -> None:
+    def refresh(self, path: str | None = None) -> None:
         """Refreshes the list to show the current directory contents."""
+        if path is not None:
+            self.current_path = path
+
         self.list_widget.clear()
-        self.title_label: QLabel = QLabel(f"{self.title} ({self.root_path})")
+        self.title_label.setText(f"{self.title} ({self.current_path})")
         try:
             entries: List[str] = []
             if self.is_remote and self.sftp:
@@ -131,6 +134,9 @@ class FileExplorerWidget(QWidget):
         self.refresh()
         self.directory_changed.emit(self.current_path)
 
+    def set_sftp(self, sftp: SFTPClient):
+        self.sftp = sftp
+
     def _is_remote_directory(self, path: str) -> bool:
         """Checks if a remote path is a directory."""
         if not self.sftp:
@@ -173,7 +179,9 @@ class FileExplorerWidget(QWidget):
     def dropEvent(self, event: QDropEvent) -> None:
         """Handle files dropped into the explorer — copy to current directory."""
         if self.is_remote:
-            return  # Do not support dropping into remote side yet
+            return
+        if not event.mimeData().hasUrls():
+            return
 
         urls: List[QUrl] = event.mimeData().urls()
         for url in urls:

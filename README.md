@@ -57,9 +57,3 @@ Welcome to **PiSync**, a Python-based application designed to automate the trans
    ```bash
    open dist/PiSync.app
    ```
-
-   Or, if running from the terminal:
-
-   ```bash
-   dist/PiSync.app/Contents/MacOS/PiSync
-   ```

@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from src.utils.constants import CONFIG_JSON, SOFTARE_NAME
+from src.utils.constants import CONFIG_JSON, SOFTWARE_NAME
 from src.utils.logging_signal import logger
 
 
@@ -39,7 +39,7 @@ class Settings:
         if cls._instance is None:
             cls._instance = super(Settings, cls).__new__(cls)
             # First, try loading from the user's local config directory
-            local_config_path = Path.home() / f".{SOFTARE_NAME}" / CONFIG_JSON
+            local_config_path = Path.home() / f".{SOFTWARE_NAME}" / CONFIG_JSON
             if local_config_path.exists() and local_config_path.is_file():
                 config_data = cls._load_config(local_config_path)
                 logger.success(f"Config: Loaded: {local_config_path}")
@@ -115,7 +115,7 @@ class Settings:
 
     def save_config(self, config_data: dict):
         # Determine save path in user directory
-        save_dir = Path.home() / f".{SOFTARE_NAME}"
+        save_dir = Path.home() / f".{SOFTWARE_NAME}"
         save_dir.mkdir(exist_ok=True)
         # ~./PiSync/config.json
         config_path = save_dir / CONFIG_JSON
