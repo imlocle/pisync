@@ -50,6 +50,18 @@ class ConnectionManagerService:
                 sleep(3)
         return False
 
+    def open_sftp_session(self):
+        """
+        Create a NEW SFTP client for a worker thread.
+        This avoids thread contention with the UI explorer's SFTP.
+        """
+        try:
+            if not self.ssh_client:
+                return None
+            return self.ssh_client.open_sftp()
+        except Exception:
+            return None
+
     def is_connected(self) -> bool:
         return self.ssh_client is not None and self.sftp_client is not None
 
@@ -68,9 +80,9 @@ class ConnectionManagerService:
 
     def test_connection(self):
         """Temporary connection just for testing."""
-        test_ssh = SSHClient()
-        test_ssh.set_missing_host_key_policy(AutoAddPolicy())
         try:
+            test_ssh = SSHClient()
+            test_ssh.set_missing_host_key_policy(AutoAddPolicy())
             test_ssh.connect(
                 hostname=self.settings.pi_ip,
                 username=self.settings.pi_user,

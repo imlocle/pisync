@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QTextEdit,
     QFormLayout,
+    QCheckBox,
 )
 from PySide6.QtGui import QTextOption
 from PySide6.QtCore import Qt
@@ -54,6 +55,7 @@ class SettingsWindow(QDialog):
             "pi_tv": self.pi_tv_input.text().strip(),
             "watch_dir": self.watch_dir_input.text().rstrip("/").strip(),
             "ssh_key_path": self.ssh_key_path.text().strip(),
+            "auto_start_monitor": self.auto_start_monitor_checkbox.isChecked(),
             "file_exts": [
                 ext.strip()
                 for ext in self.file_exts_input.toPlainText().split(",")
@@ -98,6 +100,10 @@ class SettingsWindow(QDialog):
         self.pi_tv_input = QLineEdit(self.settings.pi_tv)
         self.watch_dir_input = QLineEdit(self.settings.watch_dir)
         self.ssh_key_path = QLineEdit(self.settings.ssh_key_path)
+        self.auto_start_monitor_checkbox = QCheckBox()
+        self.auto_start_monitor_checkbox.setChecked(
+            getattr(self.settings, "auto_start_monitor", True)
+        )
 
         # Set minimum width for text inputs (e.g., 300 pixels)
         for input_field in [
@@ -118,6 +124,7 @@ class SettingsWindow(QDialog):
         form.addRow("Pi TV Path:", self.pi_tv_input)
         form.addRow("Local Watch Directory:", self.watch_dir_input)
         form.addRow("Local SSH Key Path:", self.ssh_key_path)
+        form.addRow("Auto Start Monitor:", self.auto_start_monitor_checkbox)
 
         # ---- File extensions / skip files --------------------------------
         self.file_exts_input = QTextEdit(", ".join(sorted(self.settings.file_exts)))
@@ -157,11 +164,17 @@ class SettingsWindow(QDialog):
 
     def _setup_buttons(self, layout: QVBoxLayout):
         btn_layout = QHBoxLayout()
-        self.test_connection_btn = QPushButton("Test Connection")
-        self.save_btn = QPushButton("Save")
-        self.cancel_btn = QPushButton("Cancel")
-        btn_layout.addStretch()
+        self.test_connection_btn = QPushButton("🌐")
+        self.test_connection_btn.setToolTip("Test Connection")
+
+        self.save_btn = QPushButton("💾")
+        self.save_btn.setToolTip("Save")
+
+        self.cancel_btn = QPushButton("🚫")
+        self.cancel_btn.setToolTip("Cancel")
+
         btn_layout.addWidget(self.test_connection_btn)
         btn_layout.addWidget(self.save_btn)
         btn_layout.addWidget(self.cancel_btn)
+        btn_layout.addStretch()
         layout.addLayout(btn_layout)

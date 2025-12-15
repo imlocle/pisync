@@ -31,15 +31,21 @@ QWidget {
 QPushButton {
     background-color: #2d2d2d;
     border: 1px solid #3a3a3a;
-    padding: 8px 16px;
+    padding: 4px 10px;
     border-radius: 8px;
+    font-size: 24px;
+    font-weight: bold;
 }
 QPushButton:hover {
-    background-color: #3a3a3a;
+    /* background-color: #3a3a3a; */
+    background-color: rgba(0,0,0,12%);
+}
+QPushButton:hover:!disabled {
+    background-color: rgba(0,0,0,12%);
 }
 QPushButton:disabled {
     background-color: #444;
-    color: #888;
+    color: rgb(150, 150, 150);
 }
 QTextEdit {
     background-color: #121212;

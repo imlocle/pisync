@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 from src.utils.logging_signal import logger
@@ -54,3 +55,40 @@ def rounded_icon(path: str, radius: int = 15) -> QIcon:
     painter.drawRoundedRect(pix.rect(), radius, radius)
     painter.end()
     return QIcon(rounded)
+
+
+def format_size(num_bytes: int) -> str:
+    """
+    Convert a file size in bytes into a human-readable string.
+    Always uses one decimal place.
+
+    Examples:
+        1024 -> "1.0 KB"
+        1048576 -> "1.0 MB"
+        450000000 -> "429.2 MB"
+    """
+    try:
+        if num_bytes is None:
+            return "0 B"
+        if num_bytes < 0:
+            return f"{num_bytes} B"
+
+        units = ["B", "KB", "MB", "GB", "TB"]
+        size = float(num_bytes)
+        index = 0
+
+        while size >= 1024 and index < len(units) - 1:
+            size /= 1024.0
+            index += 1
+
+        return f"{size:.1f} {units[index]}"
+
+    except Exception:
+        return f"{num_bytes} B"
+
+
+def map_local_to_remote(local_path: str, watch_dir: str, pi_root_dir: str) -> str:
+    local_path = os.path.abspath(local_path)
+    watch_dir = os.path.abspath(watch_dir)
+    rel = os.path.relpath(local_path, watch_dir)
+    return os.path.join(pi_root_dir, rel).replace("\\", "/")

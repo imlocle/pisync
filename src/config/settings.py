@@ -16,7 +16,7 @@ class SettingsConfig(BaseModel):
 
     watch_dir: str = os.path.expanduser("~/Transfers")
     ssh_key_path: str = os.path.expanduser("~/.ssh/id_rsa")
-
+    auto_start_monitor: bool = True
     file_exts: set[str] = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".srt"}
     skip_files: set[str] = {".DS_Store", "Thumbs.db", ".Trashes"}
     last_modified: str = ""
@@ -29,6 +29,7 @@ class SettingsConfig(BaseModel):
             data["file_exts"] = set(data["file_exts"])
         if "skip_files" in data:
             data["skip_files"] = set(data["skip_files"])
+        data["auto_start_monitor"] = data.get("auto_start_monitor", True)
         return cls(**data)
 
 
@@ -92,6 +93,10 @@ class Settings:
     @property
     def pi_tv(self):
         return self.config.pi_tv
+
+    @property
+    def auto_start_monitor(self):
+        return self.config.auto_start_monitor
 
     @property
     def file_exts(self):

@@ -53,8 +53,11 @@ class BaseTransferService:
         local_folder = os.path.abspath(local_folder)
 
         def progress_callback(transferred_bytes, total_bytes):
-            progress = int((transferred_bytes / total_bytes) * 100)
-            if progress % 5 == 0:
+            if total_bytes == 0:
+                return
+
+            progress = min(100, max(0, int((transferred_bytes / total_bytes) * 100)))
+            if progress % 5 == 0 or progress == 100:
                 logger.progress_signal.emit(progress)
 
         for root, _, files in os.walk(local_folder):
