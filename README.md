@@ -29,13 +29,23 @@ Welcome to **PiSync**, a Python-based application designed to automate the trans
    cd pisync
    ```
 
-2. **Install Dependencies**
+2. **Python Environment & Install Dependencies**
 
    ```bash
+   python -m venv .venv
+   source .venv/bin/activate
    pip install -r requirements.txt
    ```
 
-3. **Build App with PyInstaller**
+## Run the App
+
+1. **Run App Locally**
+
+   ```bash
+   python main.py
+   ```
+
+2. **Build App with PyInstaller**
 
    ```bash
    pyinstaller --noconfirm --onedir --windowed \
@@ -52,8 +62,12 @@ Welcome to **PiSync**, a Python-based application designed to automate the trans
      main.py
    ```
 
-4. **Run the App**
+3. **Run the App**
 
    ```bash
    open dist/PiSync.app
    ```
+
+   Note:
+
+   - If permissions don't work, run it locally.
