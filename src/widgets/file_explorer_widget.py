@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import Optional, List
 
 import os
 import shutil
 from stat import S_ISDIR
+from typing import Optional, List
 
 from paramiko import SFTPClient
 from PySide6.QtWidgets import (
