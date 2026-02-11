@@ -5,6 +5,10 @@ This module uses watchdog to monitor a directory for new media files and
 automatically transfers them to a Raspberry Pi. It includes file stability
 checking to prevent race conditions where files are transferred before
 they're fully written to disk.
+
+Classification is based purely on folder structure:
+- Files in Movies/ directory are treated as movies
+- Files in TV_shows/ directory are treated as TV shows
 """
 
 import os
@@ -14,7 +18,6 @@ from threading import Lock
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
-from src.services.file_classifier_service import FileClassifierService
 from src.services.file_deletion_service import FileDeletionService
 from src.services.movie_service import MovieService
 from src.services.tv_service import TvService
@@ -126,9 +129,14 @@ class FileMonitorRepository(FileSystemEventHandler):
     This class uses watchdog to detect file system events and processes media files
     (movies and TV shows) by transferring them to a remote server via SFTP.
     
+    Classification is based on folder structure:
+    - Files in Movies/ directory are treated as movies
+    - Files in TV_shows/ directory are treated as TV shows
+    - Files outside these directories are ignored
+    
     Features:
     - File stability checking to prevent race conditions
-    - Automatic classification of movies vs TV shows
+    - Path-based classification (no heuristics)
     - Preserves directory structure for TV shows
     - Automatic cleanup after successful transfer
     """
@@ -136,7 +144,6 @@ class FileMonitorRepository(FileSystemEventHandler):
     def __init__(
         self,
         watch_dir: str,
-        classifier_service: FileClassifierService,
         movie_service: MovieService,
         tv_service: TvService,
         deletion_service: FileDeletionService,
@@ -148,7 +155,6 @@ class FileMonitorRepository(FileSystemEventHandler):
         
         Args:
             watch_dir: Directory to monitor for new files
-            classifier_service: Service for classifying files as movies/TV
             movie_service: Service for transferring movies
             tv_service: Service for transferring TV shows
             deletion_service: Service for deleting local files after transfer
@@ -157,7 +163,6 @@ class FileMonitorRepository(FileSystemEventHandler):
         """
         super().__init__()
         self.watch_dir = watch_dir
-        self.classifier_service = classifier_service
         self.movie_service = movie_service
         self.tv_service = tv_service
         self.deletion_service = deletion_service
@@ -311,7 +316,7 @@ class FileMonitorRepository(FileSystemEventHandler):
         
         This method:
         1. Validates the file (not hidden, valid extension)
-        2. Classifies the file as movie or TV show
+        2. Classifies the file based on path (Movies/ or TV_shows/)
         3. Transfers the parent folder
         4. Deletes local files after successful transfer
         
@@ -345,9 +350,9 @@ class FileMonitorRepository(FileSystemEventHandler):
             dest_type = "tv"
             logger.info(f"Monitor: Classified as TV show (path-based): {name}")
         else:
-            # Use classifier for files outside standard directories
-            dest_type = self.classifier_service.classify_file(file_path, self.file_exts)
-            logger.info(f"Monitor: Classified as {dest_type} (heuristic): {name}")
+            # Files outside Movies/ or TV_shows/ are ignored
+            logger.warn(f"Monitor: Skipping file outside Movies/TV_shows: {name}")
+            return
 
         try:
             folder = os.path.dirname(file_path)
@@ -385,7 +390,7 @@ class FileMonitorRepository(FileSystemEventHandler):
         
         This method:
         1. Validates the folder (not hidden, not root directories)
-        2. Classifies the folder as movie or TV show
+        2. Classifies the folder based on path (Movies/ or TV_shows/)
         3. Transfers the folder
         4. Deletes local files after successful transfer
         
@@ -403,9 +408,18 @@ class FileMonitorRepository(FileSystemEventHandler):
             logger.info(f"Monitor: Skipping system folder: {name}")
             return
 
-        # Classify folder
-        dest_type = self.classifier_service.classify_folder(folder_path)
-        logger.info(f"Monitor: Classified folder as {dest_type}: {name}")
+        # Classify folder based on path
+        path_parts = folder_path.split(os.sep)
+        if MOVIES_DIR in path_parts:
+            dest_type = "movie"
+            logger.info(f"Monitor: Classified folder as movie (path-based): {name}")
+        elif TV_SHOWS_DIR in path_parts:
+            dest_type = "tv"
+            logger.info(f"Monitor: Classified folder as TV show (path-based): {name}")
+        else:
+            # Folders outside Movies/ or TV_shows/ are ignored
+            logger.warn(f"Monitor: Skipping folder outside Movies/TV_shows: {name}")
+            return
         
         try:
             if dest_type == "movie":

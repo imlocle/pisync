@@ -5,7 +5,6 @@ from paramiko import SFTPClient
 import os
 from src.config.settings import Settings
 from src.repositories.file_monitor_repository import FileMonitorRepository
-from src.services.file_classifier_service import FileClassifierService
 from src.services.file_deletion_service import FileDeletionService
 from src.services.movie_service import MovieService
 from src.services.tv_service import TvService
@@ -23,7 +22,6 @@ class MonitorThread(QThread):
         self.sftp_client = sftp_client
         self._running = True
 
-        self.classifier = FileClassifierService()
         self.file_monitor_repo: Optional[FileMonitorRepository] = None
         self.movie_service: Optional[MovieService] = None
         self.tv_service: Optional[TvService] = None
@@ -52,7 +50,6 @@ class MonitorThread(QThread):
 
             self.file_monitor_repo = FileMonitorRepository(
                 watch_dir=self.settings.local_watch_dir,
-                classifier_service=self.classifier,
                 movie_service=self.movie_service,
                 tv_service=self.tv_service,
                 deletion_service=deletion,
