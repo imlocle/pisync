@@ -1,10 +1,19 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, validator, field_validator
 import json
 import os
+import ipaddress
 from pathlib import Path
 import sys
 from src.utils.constants import CONFIG_JSON, SOFTWARE_NAME
 from src.utils.logging_signal import logger
+from src.models.errors import (
+    ConfigurationLoadError,
+    ConfigurationSaveError,
+    InvalidConfigurationError,
+    IPAddressValidationError,
+    PathValidationError,
+    SSHKeyValidationError,
+)
 
 
 class SettingsConfig(BaseModel):
@@ -17,12 +26,83 @@ class SettingsConfig(BaseModel):
     watch_dir: str = os.path.expanduser("~/Transfers")
     ssh_key_path: str = os.path.expanduser("~/.ssh/id_rsa")
     auto_start_monitor: bool = True
-    file_exts: set[str] = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".srt"}
+    file_exts: set[str] = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".srt", ".nfo"}
     skip_files: set[str] = {".DS_Store", "Thumbs.db", ".Trashes"}
     last_modified: str = ""
 
+    @field_validator('pi_ip')
+    @classmethod
+    def validate_ip_address(cls, v: str) -> str:
+        """Validate IP address format if not empty."""
+        if v and v.strip():
+            try:
+                ipaddress.ip_address(v.strip())
+            except ValueError:
+                raise IPAddressValidationError(
+                    f"Invalid IP address format: {v}",
+                    details="Please enter a valid IPv4 or IPv6 address"
+                )
+        return v
+
+    @field_validator('ssh_key_path')
+    @classmethod
+    def validate_ssh_key(cls, v: str) -> str:
+        """Validate SSH key path if not empty."""
+        if v and v.strip():
+            expanded_path = os.path.expanduser(v.strip())
+            if not os.path.exists(expanded_path):
+                # Don't raise error, just log warning (key might not exist yet)
+                logger.warn(f"SSH key not found at: {expanded_path}")
+            elif not os.path.isfile(expanded_path):
+                raise SSHKeyValidationError(
+                    f"SSH key path is not a file: {expanded_path}",
+                    details="Please provide a path to a valid SSH private key file"
+                )
+        return v
+
+    @field_validator('watch_dir')
+    @classmethod
+    def validate_watch_dir(cls, v: str) -> str:
+        """Validate watch directory path."""
+        if v and v.strip():
+            expanded_path = os.path.expanduser(v.strip())
+            # Create directory if it doesn't exist
+            try:
+                os.makedirs(expanded_path, exist_ok=True)
+            except Exception as e:
+                raise PathValidationError(
+                    f"Cannot create watch directory: {expanded_path}",
+                    details=str(e)
+                )
+        return v
+
+    @field_validator('pi_root_dir')
+    @classmethod
+    def validate_pi_root_dir(cls, v: str) -> str:
+        """Validate Pi root directory format."""
+        if v and v.strip():
+            # Ensure it starts with / for absolute path
+            if not v.strip().startswith('/'):
+                raise PathValidationError(
+                    f"Pi root directory must be an absolute path: {v}",
+                    details="Path should start with /"
+                )
+        return v
+
     @classmethod
     def from_json(cls, data: dict) -> "SettingsConfig":
+        """
+        Create SettingsConfig from JSON data.
+
+        Args:
+            data: Dictionary from JSON config file
+
+        Returns:
+            SettingsConfig instance
+
+        Raises:
+            InvalidConfigurationError: If validation fails
+        """
         # Convert lists from JSON to sets for file_exts and skip_files
         data = data.copy()
         if "file_exts" in data:
@@ -30,7 +110,15 @@ class SettingsConfig(BaseModel):
         if "skip_files" in data:
             data["skip_files"] = set(data["skip_files"])
         data["auto_start_monitor"] = data.get("auto_start_monitor", True)
-        return cls(**data)
+
+        try:
+            return cls(**data)
+        except Exception as e:
+            raise InvalidConfigurationError(
+                "Failed to parse configuration",
+                details=str(e)
+            )
+
 
 
 class Settings:
@@ -58,21 +146,46 @@ class Settings:
 
     @staticmethod
     def _load_config(config_path: Path) -> dict:
+        """
+        Load configuration from JSON file.
+
+        Args:
+            config_path: Path to config file
+
+        Returns:
+            Configuration dictionary
+
+        Raises:
+            ConfigurationLoadError: If loading fails critically
+        """
         try:
             if config_path.exists() and config_path.is_file():
                 with open(config_path, "r") as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    logger.info(f"Config: Loaded from {config_path}")
+                    return data
             else:
                 logger.warn(
-                    f"Warning: {config_path} not found or is not a file, using empty defaults."
+                    f"Config: File not found: {config_path}, using defaults"
                 )
                 return {}
         except json.JSONDecodeError as e:
-            logger.error(f"Error decoding {config_path}: {e}, using empty defaults.")
-            return {}
+            logger.error(f"Config: Invalid JSON in {config_path}: {e}")
+            raise ConfigurationLoadError(
+                f"Invalid JSON in configuration file",
+                details=f"File: {config_path}, Error: {str(e)}"
+            )
+        except PermissionError as e:
+            logger.error(f"Config: Permission denied: {config_path}")
+            raise ConfigurationLoadError(
+                f"Cannot read configuration file",
+                details=f"Permission denied: {config_path}"
+            )
         except Exception as e:
-            logger.error(f"Error loading {config_path}: {e}, using empty defaults.")
+            logger.error(f"Config: Error loading {config_path}: {e}")
+            # Return empty dict for non-critical errors
             return {}
+
 
     @property
     def pi_user(self):
@@ -118,11 +231,27 @@ class Settings:
     def last_modified(self):
         return self.config.last_modified
 
-    def save_config(self, config_data: dict):
+    def save_config(self, config_data: dict) -> None:
+        """
+        Save configuration to JSON file.
+
+        Args:
+            config_data: Configuration dictionary to save
+
+        Raises:
+            ConfigurationSaveError: If save fails
+        """
         # Determine save path in user directory
         save_dir = Path.home() / f".{SOFTWARE_NAME}"
-        save_dir.mkdir(exist_ok=True)
-        # ~./PiSync/config.json
+
+        try:
+            save_dir.mkdir(exist_ok=True)
+        except Exception as e:
+            raise ConfigurationSaveError(
+                f"Cannot create config directory: {save_dir}",
+                details=str(e)
+            )
+
         config_path = save_dir / CONFIG_JSON
 
         # Convert sets back to lists for JSON serialization
@@ -135,8 +264,18 @@ class Settings:
         try:
             with open(config_path, "w") as f:
                 json.dump(save_data, f, indent=4)
+            logger.success(f"Config: Saved to {config_path}")
+        except PermissionError as e:
+            raise ConfigurationSaveError(
+                f"Permission denied writing config",
+                details=f"Path: {config_path}"
+            )
         except Exception as e:
-            logger.error(f"Settings: Failed: {config_path}: {e}")
+            raise ConfigurationSaveError(
+                f"Failed to save configuration",
+                details=f"Path: {config_path}, Error: {str(e)}"
+            )
+
 
     def is_valid(self) -> bool:
         """Check if critical settings are non-empty."""

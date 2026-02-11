@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QFormLayout,
     QCheckBox,
+    QMessageBox,
 )
 from PySide6.QtGui import QTextOption
 from PySide6.QtCore import Qt
@@ -17,6 +18,13 @@ from src.config.settings import Settings, SettingsConfig
 from src.services.connection_manager_service import ConnectionManagerService
 from src.utils.constants import SOFTWARE_NAME
 from src.utils.logging_signal import logger
+from src.models.errors import (
+    ConfigurationSaveError,
+    InvalidConfigurationError,
+    IPAddressValidationError,
+    PathValidationError,
+    SSHKeyValidationError,
+)
 
 
 class SettingsWindow(QDialog):
@@ -45,7 +53,7 @@ class SettingsWindow(QDialog):
         self.test_connection()
 
     def save_settings(self):
-        """Collect UI values, write the config, and refresh the date."""
+        """Collect UI values, validate, and save configuration."""
 
         config_data = {
             "pi_user": self.pi_user_input.text().strip(),
@@ -69,13 +77,78 @@ class SettingsWindow(QDialog):
             "last_modified": datetime.now().strftime("%Y-%m-%d %I:%M:%S %p"),
         }
 
-        self.settings.save_config(config_data)
-        self.settings.config = SettingsConfig.from_json(config_data)
+        try:
+            # Validate configuration by creating SettingsConfig
+            validated_config = SettingsConfig.from_json(config_data)
+            
+            # Save to file
+            self.settings.save_config(config_data)
+            
+            # Update in-memory config
+            self.settings.config = validated_config
 
-        logger.success("Settings: Saved")
-        self.accept()
+            logger.success("Settings: Saved")
+            QMessageBox.information(
+                self,
+                "Settings Saved",
+                "Your settings have been saved successfully.",
+                QMessageBox.StandardButton.Ok
+            )
+            self.accept()
+            
+        except IPAddressValidationError as e:
+            QMessageBox.warning(
+                self,
+                "Invalid IP Address",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+            self.pi_ip_input.setFocus()
+            
+        except SSHKeyValidationError as e:
+            QMessageBox.warning(
+                self,
+                "Invalid SSH Key",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+            self.ssh_key_path.setFocus()
+            
+        except PathValidationError as e:
+            QMessageBox.warning(
+                self,
+                "Invalid Path",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+            
+        except InvalidConfigurationError as e:
+            QMessageBox.critical(
+                self,
+                "Configuration Error",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+            
+        except ConfigurationSaveError as e:
+            QMessageBox.critical(
+                self,
+                "Save Failed",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+            
+        except Exception as e:
+            logger.error(f"Settings: Unexpected error: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An unexpected error occurred while saving settings:\n{str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
 
     def test_connection(self):
+        """Test connection to Raspberry Pi."""
         connection_manager_service = ConnectionManagerService(self.settings)
 
         if connection_manager_service.test_connection():

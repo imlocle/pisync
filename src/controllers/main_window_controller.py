@@ -11,6 +11,13 @@ from src.controllers.monitor_thread import MonitorThread
 from src.services.connection_manager_service import ConnectionManagerService
 from src.components.settings_window import SettingsWindow
 from src.utils.logging_signal import logger
+from src.models.errors import (
+    SSHConnectionError,
+    AuthenticationError,
+    FileAccessError,
+    FileDeletionError,
+    ConnectionLostError,
+)
 
 if TYPE_CHECKING:
     from src.components.main_window import MainWindow
@@ -37,17 +44,55 @@ class MainWindowController:
     #  CONNECTION MANAGEMENT
     # --------------------------------------------------------------
     def connect(self) -> None:
-        if not self.connection_manager.connect():
-            self.view.connection_status_label.setText("🛑 Disconnected")
-            return
+        """Establish connection to Raspberry Pi with error handling."""
+        try:
+            if not self.connection_manager.connect():
+                self.view.connection_status_label.setText("🛑 Disconnected")
+                return
 
-        self.view.connection_status_label.setText(
-            f"🟢 Connected: {self.settings.pi_ip}"
-        )
+            self.view.connection_status_label.setText(
+                f"🟢 Connected: {self.settings.pi_ip}"
+            )
 
-        # bind sftp to remote explorer
-        if self.connection_manager.sftp_client:
-            self.view.pi_explorer.set_sftp(self.connection_manager.sftp_client)
+            # bind sftp to remote explorer
+            if self.connection_manager.sftp_client:
+                self.view.pi_explorer.set_sftp(self.connection_manager.sftp_client)
+                self.view.pi_explorer.refresh()
+                logger.success("Connected & Explorer Bound")
+                
+        except AuthenticationError as e:
+            self.view.connection_status_label.setText("🛑 Authentication Failed")
+            QMessageBox.critical(
+                self.view,
+                "Authentication Error",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+        except FileAccessError as e:
+            self.view.connection_status_label.setText("🛑 SSH Key Error")
+            QMessageBox.critical(
+                self.view,
+                "SSH Key Error",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+        except SSHConnectionError as e:
+            self.view.connection_status_label.setText("🛑 Connection Failed")
+            QMessageBox.warning(
+                self.view,
+                "Connection Failed",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+        except Exception as e:
+            self.view.connection_status_label.setText("🛑 Error")
+            logger.error(f"Unexpected connection error: {e}")
+            QMessageBox.critical(
+                self.view,
+                "Connection Error",
+                f"An unexpected error occurred:\n{str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
             self.view.pi_explorer.refresh()
             logger.success("Connected & Explorer Bound")
 
@@ -99,6 +144,12 @@ class MainWindowController:
             self.delete_item(self.selected_item)
 
     def delete_item(self, path: str) -> None:
+        """
+        Delete a file or folder with proper error handling.
+        
+        Args:
+            path: Path to file or folder to delete
+        """
         basename = os.path.basename(path)
         is_remote = path.startswith(self.settings.pi_root_dir)
 
@@ -122,8 +173,32 @@ class MainWindowController:
 
             logger.trash(f"Deleted: {path}")
 
+        except ConnectionLostError as e:
+            logger.error(f"Delete failed: Connection lost: {e}")
+            QMessageBox.warning(
+                self.view,
+                "Connection Lost",
+                f"Connection to Pi was lost during deletion.\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+            # Try to reconnect
+            self.connect()
+        except FileDeletionError as e:
+            logger.error(f"Delete failed: {e}")
+            QMessageBox.critical(
+                self.view,
+                "Deletion Failed",
+                f"{e.message}\n\nPath: {e.path}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
         except Exception as e:
             logger.error(f"Delete failed: {e}")
+            QMessageBox.critical(
+                self.view,
+                "Deletion Failed",
+                f"An unexpected error occurred:\n{str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
 
     def _is_remote_dir(self, path: str) -> bool:
         try:
@@ -133,29 +208,108 @@ class MainWindowController:
             return False
 
     def _delete_remote(self, path: str) -> None:
+        """
+        Delete remote file or directory.
+        
+        Args:
+            path: Remote path to delete
+            
+        Raises:
+            ConnectionLostError: If connection is lost
+            FileDeletionError: If deletion fails
+        """
         sftp = self.connection_manager.sftp_client
         if not sftp:
-            raise RuntimeError("No SFTP connection")
+            raise ConnectionLostError("No SFTP connection available")
 
-        if self._is_remote_dir(path):
-            self._delete_remote_dir(path, sftp)
-        else:
-            sftp.remove(path)
+        try:
+            if self._is_remote_dir(path):
+                self._delete_remote_dir(path, sftp)
+            else:
+                sftp.remove(path)
+        except IOError as e:
+            if "Socket is closed" in str(e) or "not open" in str(e).lower():
+                raise ConnectionLostError(
+                    "Connection lost during remote deletion",
+                    details=str(e)
+                )
+            raise FileDeletionError(
+                "Failed to delete remote item",
+                path=path,
+                details=str(e)
+            )
+        except Exception as e:
+            raise FileDeletionError(
+                "Unexpected error during remote deletion",
+                path=path,
+                details=str(e)
+            )
 
     def _delete_remote_dir(self, path: str, sftp) -> None:
-        for item in sftp.listdir(path):
-            item_path = f"{path}/{item}"
-            if self._is_remote_dir(item_path):
-                self._delete_remote_dir(item_path, sftp)
-            else:
-                sftp.remove(item_path)
-        sftp.rmdir(path)
+        """
+        Recursively delete remote directory.
+        
+        Args:
+            path: Remote directory path
+            sftp: SFTP client
+            
+        Raises:
+            ConnectionLostError: If connection is lost
+            FileDeletionError: If deletion fails
+        """
+        try:
+            for item in sftp.listdir(path):
+                item_path = f"{path}/{item}"
+                if self._is_remote_dir(item_path):
+                    self._delete_remote_dir(item_path, sftp)
+                else:
+                    sftp.remove(item_path)
+            sftp.rmdir(path)
+        except IOError as e:
+            if "Socket is closed" in str(e) or "not open" in str(e).lower():
+                raise ConnectionLostError(
+                    "Connection lost during directory deletion",
+                    details=str(e)
+                )
+            raise FileDeletionError(
+                "Failed to delete remote directory",
+                path=path,
+                details=str(e)
+            )
 
-    def _delete_local(self, path: str):
-        if os.path.isdir(path):
-            shutil.rmtree(path, ignore_errors=True)
-        else:
-            os.remove(path)
+    def _delete_local(self, path: str) -> None:
+        """
+        Delete local file or directory.
+        
+        Args:
+            path: Local path to delete
+            
+        Raises:
+            FileDeletionError: If deletion fails
+        """
+        try:
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                os.remove(path)
+        except PermissionError as e:
+            raise FileDeletionError(
+                "Permission denied",
+                path=path,
+                details="You don't have permission to delete this item"
+            )
+        except FileNotFoundError as e:
+            raise FileDeletionError(
+                "File not found",
+                path=path,
+                details="The file may have already been deleted"
+            )
+        except Exception as e:
+            raise FileDeletionError(
+                "Failed to delete local item",
+                path=path,
+                details=str(e)
+            )
 
     # --------------------------------------------------------------
     #  RENAME
