@@ -1,38 +1,81 @@
+"""
+File classification service (DEPRECATED).
+
+This module is deprecated and will be removed in a future version.
+The application now trusts the folder structure instead of using heuristics.
+
+Files under Movies/ are movies.
+Files under TV_shows/ are TV shows.
+"""
+
 import os
 from typing import Set
+import warnings
 
 
 class FileClassifierService:
+    """
+    DEPRECATED: File classification based on folder structure.
+    
+    This service is no longer needed with the simplified path mapping approach.
+    Classification is now based solely on the folder structure:
+    - Files under Movies/ -> movie
+    - Files under TV_shows/ -> tv
+    
+    This class is kept for backward compatibility but will be removed in v2.0.
+    """
+    
+    def __init__(self):
+        warnings.warn(
+            "FileClassifierService is deprecated and will be removed in v2.0. "
+            "Use folder structure for classification instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+    
     def classify_file(self, file_path: str, file_exts: Set[str]) -> str:
         """
-        Heuristic classifier:
-        - If extension matches known media extensions -> treat as movie by default
-        - If filename contains season/episode patterns -> tv
+        Classify a file as movie or TV show based on path.
+        
+        DEPRECATED: Use folder structure instead.
+        
+        Args:
+            file_path: Path to file
+            file_exts: Set of valid media extensions (unused)
+            
+        Returns:
+            "movie" or "tv"
         """
-        _, ext = os.path.splitext(file_path.lower())
-        filename = os.path.basename(file_path).lower()
-
-        if ext in file_exts:
-            # We'll still check filename for tv season pattern before defaulting to movie
-            if any(
-                token in filename for token in ("s0", "s1", "s2", "e0", "e1", "episode")
-            ):
-                return "tv"
+        # Simple path-based classification
+        path_lower = file_path.lower()
+        
+        if "tv_shows" in path_lower or "tv shows" in path_lower:
+            return "tv"
+        elif "movies" in path_lower:
             return "movie"
-
-        if (
-            "season" in filename
-            or "episode" in filename
-            or "s01" in filename
-            or "s02" in filename
-            or "s0" in filename
-        ):
-            return "tv"
+        
+        # Default to movie
         return "movie"
-
+    
     def classify_folder(self, folder_path: str) -> str:
-        folder_name = os.path.basename(folder_path).lower()
-        if "season" in folder_name or "s0" in folder_name or "episode" in folder_name:
+        """
+        Classify a folder as movie or TV show based on path.
+        
+        DEPRECATED: Use folder structure instead.
+        
+        Args:
+            folder_path: Path to folder
+            
+        Returns:
+            "movie" or "tv"
+        """
+        # Simple path-based classification
+        path_lower = folder_path.lower()
+        
+        if "tv_shows" in path_lower or "tv shows" in path_lower:
             return "tv"
-        # If folder sits under TV_SHOWS dir we assume tv (monitor repo usually sets this)
+        elif "movies" in path_lower:
+            return "movie"
+        
+        # Default to movie
         return "movie"

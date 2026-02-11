@@ -17,18 +17,42 @@ from src.models.errors import (
 
 
 class SettingsConfig(BaseModel):
+    """
+    Application configuration model.
+    
+    Simplified structure with three main sections:
+    1. Connection settings (SSH/SFTP)
+    2. Path settings (local and remote directories)
+    3. Sync behavior settings
+    """
+    
+    # Connection Settings
     pi_user: str = ""
     pi_ip: str = ""
-    pi_root_dir: str = "/"
-    pi_movies: str = ""
-    pi_tv: str = ""
-
-    watch_dir: str = os.path.expanduser("~/Transfers")
     ssh_key_path: str = os.path.expanduser("~/.ssh/id_rsa")
+    ssh_port: int = 22
+    
+    # Path Settings (simplified - just mirror structure)
+    local_watch_dir: str = os.path.expanduser("~/Transfers")
+    remote_base_dir: str = "/mnt/external"
+    
+    # Sync Behavior Settings
     auto_start_monitor: bool = True
-    file_exts: set[str] = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".srt", ".nfo"}
-    skip_files: set[str] = {".DS_Store", "Thumbs.db", ".Trashes"}
+    delete_after_transfer: bool = True
+    file_extensions: set[str] = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".srt", ".nfo"}
+    skip_patterns: set[str] = {".DS_Store", "Thumbs.db", ".Trashes", "._*"}
+    stability_duration: float = 2.0  # seconds to wait for file stability
+    
+    # Metadata
     last_modified: str = ""
+    
+    # Legacy fields for backward compatibility (will be migrated)
+    pi_root_dir: str = ""  # Deprecated: use remote_base_dir
+    pi_movies: str = ""    # Deprecated: no longer needed
+    pi_tv: str = ""        # Deprecated: no longer needed
+    watch_dir: str = ""    # Deprecated: use local_watch_dir
+    file_exts: set[str] = set()  # Deprecated: use file_extensions
+    skip_files: set[str] = set()  # Deprecated: use skip_patterns
 
     @field_validator('pi_ip')
     @classmethod
@@ -60,7 +84,7 @@ class SettingsConfig(BaseModel):
                 )
         return v
 
-    @field_validator('watch_dir')
+    @field_validator('local_watch_dir')
     @classmethod
     def validate_watch_dir(cls, v: str) -> str:
         """Validate watch directory path."""
@@ -76,18 +100,40 @@ class SettingsConfig(BaseModel):
                 )
         return v
 
-    @field_validator('pi_root_dir')
+    @field_validator('remote_base_dir')
     @classmethod
-    def validate_pi_root_dir(cls, v: str) -> str:
-        """Validate Pi root directory format."""
+    def validate_remote_base_dir(cls, v: str) -> str:
+        """Validate remote base directory format."""
         if v and v.strip():
             # Ensure it starts with / for absolute path
             if not v.strip().startswith('/'):
                 raise PathValidationError(
-                    f"Pi root directory must be an absolute path: {v}",
+                    f"Remote base directory must be an absolute path: {v}",
                     details="Path should start with /"
                 )
         return v
+    
+    def model_post_init(self, __context) -> None:
+        """
+        Migrate legacy settings to new format after initialization.
+        
+        This ensures backward compatibility with old config files.
+        """
+        # Migrate watch_dir to local_watch_dir
+        if self.watch_dir and not self.local_watch_dir:
+            self.local_watch_dir = self.watch_dir
+        
+        # Migrate pi_root_dir to remote_base_dir
+        if self.pi_root_dir and self.pi_root_dir != "/" and not self.remote_base_dir:
+            self.remote_base_dir = self.pi_root_dir
+        
+        # Migrate file_exts to file_extensions
+        if self.file_exts and not self.file_extensions:
+            self.file_extensions = self.file_exts
+        
+        # Migrate skip_files to skip_patterns
+        if self.skip_files and not self.skip_patterns:
+            self.skip_patterns = self.skip_files
 
     @classmethod
     def from_json(cls, data: dict) -> "SettingsConfig":
@@ -103,13 +149,32 @@ class SettingsConfig(BaseModel):
         Raises:
             InvalidConfigurationError: If validation fails
         """
-        # Convert lists from JSON to sets for file_exts and skip_files
+        # Convert lists from JSON to sets for file_extensions and skip_patterns
         data = data.copy()
-        if "file_exts" in data:
+
+        # Handle new field names
+        if "file_extensions" in data and isinstance(data["file_extensions"], list):
+            data["file_extensions"] = set(data["file_extensions"])
+        if "skip_patterns" in data and isinstance(data["skip_patterns"], list):
+            data["skip_patterns"] = set(data["skip_patterns"])
+
+        # Handle legacy field names for backward compatibility
+        if "file_exts" in data and isinstance(data["file_exts"], list):
             data["file_exts"] = set(data["file_exts"])
-        if "skip_files" in data:
+        if "skip_files" in data and isinstance(data["skip_files"], list):
             data["skip_files"] = set(data["skip_files"])
+
+        # Ensure auto_start_monitor has a default
         data["auto_start_monitor"] = data.get("auto_start_monitor", True)
+
+        # Ensure delete_after_transfer has a default
+        data["delete_after_transfer"] = data.get("delete_after_transfer", True)
+
+        # Ensure stability_duration has a default
+        data["stability_duration"] = data.get("stability_duration", 2.0)
+
+        # Ensure ssh_port has a default
+        data["ssh_port"] = data.get("ssh_port", 22)
 
         try:
             return cls(**data)
@@ -118,6 +183,7 @@ class SettingsConfig(BaseModel):
                 "Failed to parse configuration",
                 details=str(e)
             )
+
 
 
 
@@ -187,6 +253,43 @@ class Settings:
             return {}
 
 
+    # New simplified properties
+    @property
+    def local_watch_dir(self):
+        """Local watch directory (replaces watch_dir)"""
+        return self.config.local_watch_dir
+    
+    @property
+    def remote_base_dir(self):
+        """Remote base directory (replaces pi_root_dir)"""
+        return self.config.remote_base_dir
+    
+    @property
+    def file_extensions(self):
+        """Allowed file extensions (replaces file_exts)"""
+        return self.config.file_extensions
+    
+    @property
+    def skip_patterns(self):
+        """Skip patterns (replaces skip_files)"""
+        return self.config.skip_patterns
+    
+    @property
+    def delete_after_transfer(self):
+        """Whether to delete local files after transfer"""
+        return self.config.delete_after_transfer
+    
+    @property
+    def stability_duration(self):
+        """File stability duration in seconds"""
+        return self.config.stability_duration
+    
+    @property
+    def ssh_port(self):
+        """SSH port number"""
+        return self.config.ssh_port
+    
+    # Legacy properties for backward compatibility
     @property
     def pi_user(self):
         return self.config.pi_user
@@ -197,14 +300,17 @@ class Settings:
 
     @property
     def pi_root_dir(self):
-        return self.config.pi_root_dir
+        """Deprecated: use remote_base_dir"""
+        return self.config.remote_base_dir or self.config.pi_root_dir
 
     @property
     def pi_movies(self):
+        """Deprecated: no longer needed with simplified path mapping"""
         return self.config.pi_movies
 
     @property
     def pi_tv(self):
+        """Deprecated: no longer needed with simplified path mapping"""
         return self.config.pi_tv
 
     @property
@@ -213,11 +319,13 @@ class Settings:
 
     @property
     def file_exts(self):
-        return self.config.file_exts
+        """Deprecated: use file_extensions"""
+        return self.config.file_extensions or self.config.file_exts
 
     @property
     def skip_files(self):
-        return self.config.skip_files
+        """Deprecated: use skip_patterns"""
+        return self.config.skip_patterns or self.config.skip_files
 
     @property
     def ssh_key_path(self):
@@ -225,7 +333,8 @@ class Settings:
 
     @property
     def watch_dir(self):
-        return self.config.watch_dir
+        """Deprecated: use local_watch_dir"""
+        return self.config.local_watch_dir or self.config.watch_dir
 
     @property
     def last_modified(self):
@@ -256,9 +365,17 @@ class Settings:
 
         # Convert sets back to lists for JSON serialization
         save_data = config_data.copy()
-        if "file_exts" in save_data:
+        
+        # Handle new field names
+        if "file_extensions" in save_data and isinstance(save_data["file_extensions"], set):
+            save_data["file_extensions"] = list(save_data["file_extensions"])
+        if "skip_patterns" in save_data and isinstance(save_data["skip_patterns"], set):
+            save_data["skip_patterns"] = list(save_data["skip_patterns"])
+        
+        # Handle legacy field names
+        if "file_exts" in save_data and isinstance(save_data["file_exts"], set):
             save_data["file_exts"] = list(save_data["file_exts"])
-        if "skip_files" in save_data:
+        if "skip_files" in save_data and isinstance(save_data["skip_files"], set):
             save_data["skip_files"] = list(save_data["skip_files"])
 
         try:
@@ -278,13 +395,17 @@ class Settings:
 
 
     def is_valid(self) -> bool:
-        """Check if critical settings are non-empty."""
+        """
+        Check if critical settings are configured.
+        
+        Returns:
+            True if all required settings are present
+        """
         return all(
             [
                 self.pi_user.strip(),
                 self.pi_ip.strip(),
-                self.pi_root_dir.strip(),
-                self.pi_movies.strip(),
-                self.pi_tv.strip(),
+                self.remote_base_dir.strip(),
+                self.local_watch_dir.strip(),
             ]
         )

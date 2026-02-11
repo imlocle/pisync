@@ -1,33 +1,76 @@
+"""
+TV show transfer service.
+
+Handles transferring TV show directories to the Raspberry Pi.
+Uses PathMapper for consistent path mapping.
+"""
+
 from __future__ import annotations
 import os
+from pathlib import Path
 from src.services.base_transfer_service import BaseTransferService
+from src.application.path_mapper import PathMapper
+from src.utils.logging_signal import logger
 
 
 class TvService(BaseTransferService):
     """
-    Handles transferring TV-show files while preserving the directory hierarchy
-    under /mnt/external/TV_shows or general /mnt/external root.
+    Handles transferring TV show directories.
+    
+    TV shows are transferred with their complete folder structure preserved.
+    Example:
+        Local:  ~/Transfers/TV_shows/the_sandman/s01/episode.mkv
+        Remote: /mnt/external/TV_shows/the_sandman/s01/episode.mkv
     """
+
+    def __init__(self, sftp, watch_dir: str, pi_root_dir: str):
+        """
+        Initialize TV show transfer service.
+        
+        Args:
+            sftp: Active SFTP client
+            watch_dir: Local watch directory (e.g., ~/Transfers)
+            pi_root_dir: Remote base directory (e.g., /mnt/external)
+        """
+        super().__init__(sftp, watch_dir, pi_root_dir)
+        self.path_mapper = PathMapper(watch_dir, pi_root_dir)
 
     def transfer_tv_folder(self, local_folder: str) -> bool:
         """
-        Transfer contents of a local_folder to remote root preserving the path relative
-        to ~/Transfers. For example:
-          local_folder = ~/Transfers/TV_shows/the_sandman/s01
-        remote target = /mnt/external/TV_shows/the_sandman/s01
+        Transfer a TV show folder to remote server.
+        
+        The folder structure is preserved using PathMapper.
+        
+        Args:
+            local_folder: Path to local TV show folder
+            
+        Returns:
+            True on success, False on failure
+            
+        Example:
+            local_folder = ~/Transfers/TV_shows/the_sandman/s01
+            remote_folder = /mnt/external/TV_shows/the_sandman/s01
         """
         local_folder = os.path.abspath(local_folder)
-        if not local_folder.startswith(os.path.abspath(self.watch_dir)):
-            # fallback: just map local folder name under remote_root
-            remote_folder = os.path.join(
-                self.pi_root_dir, os.path.basename(local_folder)
-            ).replace("\\", "/")
-        else:
-            rel = os.path.relpath(local_folder, self.watch_dir)
-            remote_folder = os.path.join(self.pi_root_dir, rel).replace("\\", "/")
+        
+        if not os.path.isdir(local_folder):
+            logger.warn(f"TV: Not a directory: {local_folder}")
+            return False
 
         try:
+            # Use PathMapper to get remote path
+            remote_folder = str(self.path_mapper.map_to_remote(local_folder))
+            
+            logger.info(f"TV: Mapping {local_folder} -> {remote_folder}")
+            
+            # Transfer the folder
             self.transfer_folder(local_folder, remote_folder)
             return True
+            
+        except ValueError as e:
+            # Path not under watch directory
+            logger.error(f"TV: Path mapping error: {e}")
+            return False
         except Exception as e:
+            logger.error(f"TV: Transfer failed: {e}")
             return False

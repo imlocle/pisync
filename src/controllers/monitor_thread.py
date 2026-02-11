@@ -29,28 +29,35 @@ class MonitorThread(QThread):
         self.tv_service: Optional[TvService] = None
 
     def run(self) -> None:
+        """
+        Run the monitoring thread.
+        
+        Initializes services and starts file monitoring.
+        """
         try:
+            # Initialize services with simplified path mapping
             self.movie_service = MovieService(
                 sftp=self.sftp_client,
-                watch_dir=self.settings.watch_dir,
-                pi_root_dir=f"{self.settings.pi_root_dir}/{self.settings.pi_movies}",
+                watch_dir=self.settings.local_watch_dir,
+                pi_root_dir=self.settings.remote_base_dir,
             )
 
             self.tv_service = TvService(
                 sftp=self.sftp_client,
-                watch_dir=self.settings.watch_dir,
-                pi_root_dir=self.settings.pi_root_dir,
+                watch_dir=self.settings.local_watch_dir,
+                pi_root_dir=self.settings.remote_base_dir,
             )
 
             deletion = FileDeletionService()
 
             self.file_monitor_repo = FileMonitorRepository(
-                watch_dir=self.settings.watch_dir,
+                watch_dir=self.settings.local_watch_dir,
                 classifier_service=self.classifier,
                 movie_service=self.movie_service,
                 tv_service=self.tv_service,
                 deletion_service=deletion,
-                file_exts=self.settings.file_exts,
+                file_exts=self.settings.file_extensions,
+                stability_duration=self.settings.stability_duration,
             )
 
             self.file_monitor_repo.create_directories()
@@ -69,97 +76,67 @@ class MonitorThread(QThread):
 
     def scan_and_transfer(self) -> None:
         """
-        Scan ~/Transfers and upload existing files before enabling live monitoring.
-        Behavior:
-         - For movie folders under ~/Transfers/Movies -> upload entire folder via MovieService
-         - For TV_shows -> upload folder structure via TvService
-         - Skips hidden/system files
+        Scan watch directory and upload existing files before enabling live monitoring.
+        
+        This method processes any files that were added while the app was not running.
+        It scans the Movies/ and TV_shows/ subdirectories and transfers their contents.
         """
-        root = self.settings.watch_dir
+        root = self.settings.local_watch_dir
         logger.start(f"Scan: Start: {root}")
+        
         if not os.path.isdir(root):
             logger.info(f"{root} not found, skipping pre-scan.")
             return
 
-        for top, dirs, files in os.walk(root):
-            # We want to process at top-level folder level (e.g. Movies/<movie_folder> or TV_shows/<show>/...)
-            # Skip nested traversal here; only handle actionable items when we discover folders/files
-            break
+        # Scan Movies directory
+        movies_dir = os.path.join(root, "Movies")
+        if os.path.isdir(movies_dir):
+            logger.info(f"Scan: Processing Movies directory")
+            for movie_folder in sorted(os.listdir(movies_dir)):
+                if movie_folder.startswith("."):
+                    continue
+                local_folder = os.path.join(movies_dir, movie_folder)
+                if not os.path.isdir(local_folder):
+                    continue
+                    
+                try:
+                    logger.info(f"Scan: Movies: {movie_folder}")
+                    if self.movie_service.transfer_movie_folder(local_folder):
+                        # Delete local folder after successful transfer
+                        if self.settings.delete_after_transfer and self.file_monitor_repo:
+                            self.file_monitor_repo.deletion_service.delete_folder(local_folder)
+                except Exception as e:
+                    logger.error(f"Scan: Movie transfer failed: {local_folder} - {e}")
 
-        # Walk immediate children of root
-        for entry in sorted(os.listdir(root)):
-            if entry.startswith("."):
-                continue
-            entry_path = os.path.join(root, entry)
-            # If top-level is Movies or TV_shows, iterate inside those
-            if entry == self.settings.pi_movies:
-                # iterate each movie folder
-                for movie_folder in sorted(os.listdir(entry_path)):
-                    if movie_folder.startswith("."):
-                        continue
-                    local_folder = os.path.join(entry_path, movie_folder)
-                    try:
-                        logger.info(f"Scan: Movies: {movie_folder}")
-                        if self.movie_service.transfer_movie_folder(local_folder):
-                            # delete local folder
-                            # deletion via repository deletion service if available
-                            if self.file_monitor_repo:
-                                self.file_monitor_repo.deletion_service.delete_folder(
-                                    local_folder
-                                )
-                    except Exception as e:
-                        logger.error(
-                            f"Pre-scan movie transfer failed: {local_folder} - {e}\n"
-                        )
-
-            elif entry == self.settings.pi_tv:
-                # iterate each show (show -> seasons -> files)
-                for show in sorted(os.listdir(entry_path)):
-                    if show.startswith("."):
-                        continue
-                    show_path = os.path.join(entry_path, show)
-                    # transfer recursively using tv_service
-                    try:
-                        logger.info(f"Scan: TV show: {show}")
-                        if self.tv_service.transfer_tv_folder(show_path):
-                            # delete only video files
-                            if self.file_monitor_repo:
-                                for root_dir, _, files in os.walk(show_path):
-                                    for f in files:
-                                        if f.startswith("."):
-                                            continue
-                                        ext = os.path.splitext(f)[1].lower()
-                                        if ext in self.settings.file_exts:
+        # Scan TV_shows directory
+        tv_dir = os.path.join(root, "TV_shows")
+        if os.path.isdir(tv_dir):
+            logger.info(f"Scan: Processing TV_shows directory")
+            for show in sorted(os.listdir(tv_dir)):
+                if show.startswith("."):
+                    continue
+                show_path = os.path.join(tv_dir, show)
+                if not os.path.isdir(show_path):
+                    continue
+                    
+                try:
+                    logger.info(f"Scan: TV show: {show}")
+                    if self.tv_service.transfer_tv_folder(show_path):
+                        # Delete only video files after successful transfer
+                        if self.settings.delete_after_transfer and self.file_monitor_repo:
+                            for root_dir, _, files in os.walk(show_path):
+                                for f in files:
+                                    if f.startswith("."):
+                                        continue
+                                    ext = os.path.splitext(f)[1].lower()
+                                    if ext in self.settings.file_extensions:
+                                        try:
                                             self.file_monitor_repo.deletion_service.delete_file(
                                                 os.path.join(root_dir, f)
                                             )
-                    except Exception as e:
-                        logger.error(f"Scan: TV shows: Failed: {show_path} - {e}")
-            else:
-                # If someone dropped a folder directly under ~/Transfers (not Movies/TV_shows),
-                # try to classify and process accordingly.
-                if os.path.isdir(entry_path):
-                    try:
-                        kind = self.classifier.classify_folder(entry_path)
-                        if kind == "movie":
-                            if self.movie_service.transfer_movie_folder(entry_path):
-                                if self.file_monitor_repo:
-                                    self.file_monitor_repo.deletion_service.delete_folder(
-                                        entry_path
-                                    )
-                        else:
-                            if self.tv_service.transfer_tv_folder(entry_path):
-                                if self.file_monitor_repo:
-                                    for root_dir, _, files in os.walk(entry_path):
-                                        for f in files:
-                                            if f.startswith("."):
-                                                continue
-                                            ext = os.path.splitext(f)[1].lower()
-                                            if ext in self.settings.file_exts:
-                                                self.file_monitor_repo.deletion_service.delete_file(
-                                                    os.path.join(root_dir, f)
-                                                )
-                    except Exception as e:
-                        logger.error(f"Scan: Generic: Failed: {entry_path} - {e}")
+                                        except Exception as e:
+                                            logger.warn(f"Scan: Could not delete {f}: {e}")
+                except Exception as e:
+                    logger.error(f"Scan: TV show transfer failed: {show_path} - {e}")
 
         logger.success(f"Scan: Complete: {root}")
