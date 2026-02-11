@@ -58,20 +58,21 @@ class SettingsWindow(QDialog):
         config_data = {
             "pi_user": self.pi_user_input.text().strip(),
             "pi_ip": self.pi_ip_input.text().strip(),
-            "pi_root_dir": self.pi_root_dir_input.text().rstrip("/").strip(),
-            "pi_movies": self.pi_movies_input.text().strip(),
-            "pi_tv": self.pi_tv_input.text().strip(),
-            "watch_dir": self.watch_dir_input.text().rstrip("/").strip(),
+            "local_watch_dir": self.local_watch_dir_input.text().rstrip("/").strip(),
+            "remote_base_dir": self.remote_base_dir_input.text().rstrip("/").strip(),
             "ssh_key_path": self.ssh_key_path.text().strip(),
+            "ssh_port": int(self.ssh_port_input.text().strip() or "22"),
             "auto_start_monitor": self.auto_start_monitor_checkbox.isChecked(),
-            "file_exts": [
+            "delete_after_transfer": self.delete_after_transfer_checkbox.isChecked(),
+            "stability_duration": float(self.stability_duration_input.text().strip() or "2.0"),
+            "file_extensions": [
                 ext.strip()
-                for ext in self.file_exts_input.toPlainText().split(",")
+                for ext in self.file_extensions_input.toPlainText().split(",")
                 if ext.strip()
             ],
-            "skip_files": [
+            "skip_patterns": [
                 f.strip()
-                for f in self.skip_files_input.toPlainText().split(",")
+                for f in self.skip_patterns_input.toPlainText().split(",")
                 if f.strip()
             ],
             "last_modified": datetime.now().strftime("%Y-%m-%d %I:%M:%S %p"),
@@ -168,57 +169,68 @@ class SettingsWindow(QDialog):
         # ---- Pi connection ------------------------------------------------
         self.pi_user_input = QLineEdit(self.settings.pi_user)
         self.pi_ip_input = QLineEdit(self.settings.pi_ip)
-        self.pi_root_dir_input = QLineEdit(self.settings.pi_root_dir)
-        self.pi_movies_input = QLineEdit(self.settings.pi_movies)
-        self.pi_tv_input = QLineEdit(self.settings.pi_tv)
-        self.watch_dir_input = QLineEdit(self.settings.watch_dir)
+        self.ssh_port_input = QLineEdit(str(self.settings.ssh_port))
         self.ssh_key_path = QLineEdit(self.settings.ssh_key_path)
+        
+        # ---- Paths --------------------------------------------------------
+        self.local_watch_dir_input = QLineEdit(self.settings.local_watch_dir)
+        self.remote_base_dir_input = QLineEdit(self.settings.remote_base_dir)
+        
+        # ---- Options ------------------------------------------------------
         self.auto_start_monitor_checkbox = QCheckBox()
         self.auto_start_monitor_checkbox.setChecked(
             getattr(self.settings, "auto_start_monitor", True)
         )
+        
+        self.delete_after_transfer_checkbox = QCheckBox()
+        self.delete_after_transfer_checkbox.setChecked(
+            self.settings.delete_after_transfer
+        )
+        
+        self.stability_duration_input = QLineEdit(str(self.settings.stability_duration))
 
-        # Set minimum width for text inputs (e.g., 300 pixels)
+        # Set minimum width for text inputs
         for input_field in [
             self.pi_user_input,
             self.pi_ip_input,
-            self.pi_root_dir_input,
-            self.pi_movies_input,
-            self.pi_tv_input,
-            self.watch_dir_input,
+            self.ssh_port_input,
+            self.local_watch_dir_input,
+            self.remote_base_dir_input,
             self.ssh_key_path,
+            self.stability_duration_input,
         ]:
             input_field.setMinimumWidth(300)
 
         form.addRow("Pi User:", self.pi_user_input)
         form.addRow("Pi IP:", self.pi_ip_input)
-        form.addRow("Pi Root Directory:", self.pi_root_dir_input)
-        form.addRow("Pi Movies Path:", self.pi_movies_input)
-        form.addRow("Pi TV Path:", self.pi_tv_input)
-        form.addRow("Local Watch Directory:", self.watch_dir_input)
-        form.addRow("Local SSH Key Path:", self.ssh_key_path)
+        form.addRow("SSH Port:", self.ssh_port_input)
+        form.addRow("SSH Key Path:", self.ssh_key_path)
+        form.addRow("Local Watch Directory:", self.local_watch_dir_input)
+        form.addRow("Remote Base Directory:", self.remote_base_dir_input)
         form.addRow("Auto Start Monitor:", self.auto_start_monitor_checkbox)
+        form.addRow("Delete After Transfer:", self.delete_after_transfer_checkbox)
+        form.addRow("Stability Duration (seconds):", self.stability_duration_input)
 
-        # ---- File extensions / skip files --------------------------------
-        self.file_exts_input = QTextEdit(", ".join(sorted(self.settings.file_exts)))
-        self.file_exts_input.setMaximumHeight(80)
-        self.file_exts_input.setAcceptRichText(False)
-        self.file_exts_input.setWordWrapMode(QTextOption.WrapMode.WordWrap)
+        # ---- File extensions / skip patterns ------------------------------
+        self.file_extensions_input = QTextEdit(", ".join(sorted(self.settings.file_extensions)))
+        self.file_extensions_input.setMaximumHeight(80)
+        self.file_extensions_input.setAcceptRichText(False)
+        self.file_extensions_input.setWordWrapMode(QTextOption.WrapMode.WordWrap)
 
-        self.skip_files_input = QTextEdit(", ".join(sorted(self.settings.skip_files)))
-        self.skip_files_input.setMaximumHeight(80)
-        self.skip_files_input.setAcceptRichText(False)
-        self.skip_files_input.setWordWrapMode(QTextOption.WrapMode.WordWrap)
+        self.skip_patterns_input = QTextEdit(", ".join(sorted(self.settings.skip_patterns)))
+        self.skip_patterns_input.setMaximumHeight(80)
+        self.skip_patterns_input.setAcceptRichText(False)
+        self.skip_patterns_input.setWordWrapMode(QTextOption.WrapMode.WordWrap)
 
-        self.file_exts_input.setHorizontalScrollBarPolicy(
+        self.file_extensions_input.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
-        self.skip_files_input.setHorizontalScrollBarPolicy(
+        self.skip_patterns_input.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
 
-        form.addRow("File Extensions (comma separated):", self.file_exts_input)
-        form.addRow("Skip Files (comma separated):", self.skip_files_input)
+        form.addRow("File Extensions (comma separated):", self.file_extensions_input)
+        form.addRow("Skip Patterns (comma separated):", self.skip_patterns_input)
 
         layout.addLayout(form)
 

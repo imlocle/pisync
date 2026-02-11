@@ -18,7 +18,6 @@ from PySide6.QtGui import QCloseEvent, QShowEvent
 from src.components.settings_window import SettingsWindow
 from src.config.settings import Settings
 from src.controllers.main_window_controller import MainWindowController
-from src.controllers.transfer_controller import TransferController
 from src.services.connection_manager_service import ConnectionManagerService
 from src.utils.constants import SOFTWARE_NAME
 from src.utils.logging_signal import logger
@@ -44,13 +43,8 @@ class MainWindow(QWidget):
 
         # Create controller
         self.connection_manager_service = ConnectionManagerService(self.settings)
-        self.transfer_controller = TransferController(
-            self.settings,
-            self.connection_manager_service,
-            parent=self,
-        )
         self.controller = MainWindowController(
-            self, self.connection_manager_service, self.transfer_controller
+            self, self.connection_manager_service
         )
 
         # === 2. Build Layout ===
@@ -173,13 +167,13 @@ class MainWindow(QWidget):
 
         self.watch_explorer = FileExplorerWidget(
             settings=self.settings,
-            root_path=self.settings.watch_dir,
+            root_path=self.settings.local_watch_dir,
             title="Watch Directory",
         )
 
         self.pi_explorer = FileExplorerWidget(
             settings=self.settings,
-            root_path=self.settings.pi_root_dir,
+            root_path=self.settings.remote_base_dir,
             title="Raspberry Pi Files",
             is_remote=True,
             sftp=None,
@@ -252,8 +246,10 @@ class MainWindow(QWidget):
     def _handle_pi_drop(self, local_paths: list[str], remote_dir: str) -> None:
         """
         Called when user drags files/folders from Finder onto the Pi explorer.
-
-        We just delegate to the TransferController, which runs the upload
-        in a background thread.
+        
+        Delegates to ManualTransferController for handling.
         """
-        self.transfer_controller.upload_to_pi(local_paths, remote_dir)
+        self.controller.manual_transfer.transfer_to_pi(
+            local_paths=local_paths,
+            remote_destination=remote_dir
+        )
