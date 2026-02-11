@@ -104,14 +104,16 @@ class MainWindowController:
     
     def _on_monitoring_started(self) -> None:
         """Handle monitoring started."""
-        self.view.status_label.setText("🟢 Status: Monitoring: Active")
+        self.view.status_label.setText("▶ Monitoring: Active")
+        self.view.status_label.setStyleSheet("color: #4ec9b0; font-weight: 500;")
         self.view.start_btn.setEnabled(False)
         self.view.stop_btn.setEnabled(True)
         self.view.upload_all_btn.setEnabled(True)
     
     def _on_monitoring_stopped(self) -> None:
         """Handle monitoring stopped."""
-        self.view.status_label.setText("🛑 Status: Monitoring: Idle")
+        self.view.status_label.setText("⏸ Monitoring: Idle")
+        self.view.status_label.setStyleSheet("color: #858585; font-weight: 500;")
         self.view.start_btn.setEnabled(True)
         self.view.stop_btn.setEnabled(False)
         self.view.upload_all_btn.setEnabled(False)
@@ -123,21 +125,25 @@ class MainWindowController:
         """Establish connection to Raspberry Pi with error handling."""
         try:
             if not self.connection_manager.connect():
-                self.view.connection_status_label.setText("🛑 Disconnected")
+                self.view.connection_status_label.setText("● Disconnected")
+                self.view.connection_status_label.setObjectName("connection_disconnected")
+                self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
                 return
 
-            self.view.connection_status_label.setText(
-                f"🟢 Connected: {self.settings.pi_ip}"
-            )
+            self.view.connection_status_label.setText(f"● Connected to {self.settings.pi_ip}")
+            self.view.connection_status_label.setObjectName("connection_connected")
+            self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
 
             # bind sftp to remote explorer
             if self.connection_manager.sftp_client:
                 self.view.pi_explorer.set_sftp(self.connection_manager.sftp_client)
                 self.view.pi_explorer.refresh()
-                logger.success("Connected & Explorer Bound")
+                logger.success("Connected to Raspberry Pi")
                 
         except AuthenticationError as e:
-            self.view.connection_status_label.setText("🛑 Authentication Failed")
+            self.view.connection_status_label.setText("● Authentication Failed")
+            self.view.connection_status_label.setObjectName("connection_disconnected")
+            self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
             QMessageBox.critical(
                 self.view,
                 "Authentication Error",
@@ -145,7 +151,9 @@ class MainWindowController:
                 QMessageBox.StandardButton.Ok
             )
         except FileAccessError as e:
-            self.view.connection_status_label.setText("🛑 SSH Key Error")
+            self.view.connection_status_label.setText("● SSH Key Error")
+            self.view.connection_status_label.setObjectName("connection_disconnected")
+            self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
             QMessageBox.critical(
                 self.view,
                 "SSH Key Error",
@@ -153,7 +161,9 @@ class MainWindowController:
                 QMessageBox.StandardButton.Ok
             )
         except SSHConnectionError as e:
-            self.view.connection_status_label.setText("🛑 Connection Failed")
+            self.view.connection_status_label.setText("● Connection Failed")
+            self.view.connection_status_label.setObjectName("connection_disconnected")
+            self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
             QMessageBox.warning(
                 self.view,
                 "Connection Failed",
@@ -161,7 +171,9 @@ class MainWindowController:
                 QMessageBox.StandardButton.Ok
             )
         except Exception as e:
-            self.view.connection_status_label.setText("🛑 Error")
+            self.view.connection_status_label.setText("● Error")
+            self.view.connection_status_label.setObjectName("connection_disconnected")
+            self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
             logger.error(f"Unexpected connection error: {e}")
             QMessageBox.critical(
                 self.view,
@@ -169,13 +181,13 @@ class MainWindowController:
                 f"An unexpected error occurred:\n{str(e)}",
                 QMessageBox.StandardButton.Ok
             )
-            self.view.pi_explorer.refresh()
-            logger.success("Connected & Explorer Bound")
 
     def check_connection(self) -> None:
         """Check connection and reconnect if needed."""
         if not self.connection_manager.is_connected():
-            self.view.connection_status_label.setText("🛑 Disconnected")
+            self.view.connection_status_label.setText("● Disconnected")
+            self.view.connection_status_label.setObjectName("connection_disconnected")
+            self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
             self.connect()
 
     def handle_remote_explorer_failure(self, error_msg: str) -> None:
@@ -186,7 +198,9 @@ class MainWindowController:
             self.view.pi_explorer.set_sftp(self.connection_manager.sftp_client)
             self.view.pi_explorer.refresh(self.settings.remote_base_dir)
         else:
-            self.view.connection_status_label.setText("🛑 Disconnected")
+            self.view.connection_status_label.setText("● Disconnected")
+            self.view.connection_status_label.setObjectName("connection_disconnected")
+            self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
             logger.error("Cannot recover connection.")
 
     # --------------------------------------------------------------
@@ -204,7 +218,9 @@ class MainWindowController:
             self.view.pi_explorer.refresh()
         else:
             # Don't spam errors; just reflect disconnected state
-            self.view.connection_status_label.setText("🛑 Disconnected")
+            self.view.connection_status_label.setText("● Disconnected")
+            self.view.connection_status_label.setObjectName("connection_disconnected")
+            self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
 
         logger.success("Explorers refreshed")
 

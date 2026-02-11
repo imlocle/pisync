@@ -11,7 +11,7 @@ def main():
     app.setApplicationVersion("1.0.0")
 
     # ---- STYLESHEET ----
-    stylesheet_path = get_path("assets/styles/styles.qss")
+    stylesheet_path = get_path("assets/styles/modern_theme.qss")
     try:
         with open(stylesheet_path, "r") as f:
             app.setStyleSheet(f.read())

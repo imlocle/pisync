@@ -11,9 +11,10 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QDialog,
     QProgressBar,
+    QFrame,
 )
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QCloseEvent, QShowEvent
+from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtGui import QCloseEvent, QShowEvent, QIcon
 
 from src.components.settings_window import SettingsWindow
 from src.config.settings import Settings
@@ -25,17 +26,21 @@ from src.widgets.file_explorer_widget import FileExplorerWidget
 
 
 class MainWindow(QWidget):
-    """Pure UI class. All logic is delegated to MainWindowController."""
+    """
+    Modern, clean main window for PiSync.
+    
+    Features:
+    - Clean toolbar with icon + text buttons
+    - Status bar with connection and monitoring status
+    - Dual-pane file explorer
+    - Activity log with timestamps
+    - Progress indicator
+    """
 
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(SOFTWARE_NAME)
-        self.setMinimumSize(1000, 800)
-
-        self.connection_status_label = QLabel()
-        self.log_box = QTextEdit(readOnly=True)
-        logger.log_signal.connect(self.log)
-        logger.progress_signal.connect(self.update_progress)
+        self.setMinimumSize(1200, 800)
 
         # === 1. Load Settings ===
         if not self._validate_settings():
@@ -49,16 +54,23 @@ class MainWindow(QWidget):
 
         # === 2. Build Layout ===
         main_layout = QVBoxLayout()
-        self._setup_navbar(main_layout)
-        self._setup_splitter(main_layout)
-        self._setup_connection_status_label(main_layout)
-        self._setup_log_box(main_layout)
-        self._setup_status_label(main_layout)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        self._setup_toolbar(main_layout)
+        self._setup_status_bar(main_layout)
+        self._setup_content_area(main_layout)
+        self._setup_activity_log(main_layout)
         self._setup_progress_bar(main_layout)
+        
         self.setLayout(main_layout)
 
-        # === 3. Wire Signals (to controller) ===
+        # === 3. Wire Signals ===
         self._setup_connections()
+        
+        # === 4. Connect logger ===
+        logger.log_signal.connect(self.log)
+        logger.progress_signal.connect(self.update_progress)
 
     # ------------------------------------------------------------------
     # Validation
@@ -119,62 +131,123 @@ class MainWindow(QWidget):
         self.pi_explorer.remote_error.connect(
             self.controller.handle_remote_explorer_failure
         )
-        self.pi_explorer.files_dropped.connect(self._handle_pi_drop)
-
-    def _start_refresh_timer(self) -> None:
-        self.refresh_timer = QTimer(self)
-        self.refresh_timer.timeout.connect(self.controller.refresh_explorers)
-        self.refresh_timer.start(30000)
 
     # ------------------------------------------------------------------
     # UI Setup
     # ------------------------------------------------------------------
-    def _setup_navbar(self, layout: QVBoxLayout):
-        nav = QHBoxLayout()
+    def _setup_toolbar(self, layout: QVBoxLayout) -> None:
+        """Create modern toolbar with icon + text buttons."""
+        toolbar = QFrame()
+        toolbar.setObjectName("toolbar")
+        toolbar.setStyleSheet("""
+            QFrame#toolbar {
+                background-color: #252526;
+                border-bottom: 1px solid #3e3e42;
+                padding: 8px;
+            }
+        """)
+        
+        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(12, 8, 12, 8)
+        toolbar_layout.setSpacing(8)
 
-        self.start_btn = QPushButton("▶︎")
-        self.start_btn.setToolTip("Start Monitoring")
+        # Start button
+        self.start_btn = QPushButton("▶  Start Monitoring")
+        self.start_btn.setObjectName("primary_btn")
+        self.start_btn.setMinimumHeight(36)
+        self.start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self.stop_btn = QPushButton("◼")
-        self.stop_btn.setToolTip("Stop Monitoring")
+        # Stop button
+        self.stop_btn = QPushButton("⏹  Stop Monitoring")
+        self.stop_btn.setMinimumHeight(36)
         self.stop_btn.setEnabled(False)
+        self.stop_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self.upload_all_btn = QPushButton("⬆")
-        self.upload_all_btn.setToolTip("Upload All")
+        # Upload all button
+        self.upload_all_btn = QPushButton("⬆  Upload All")
+        self.upload_all_btn.setMinimumHeight(36)
         self.upload_all_btn.setEnabled(False)
+        self.upload_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
+        # Spacer
+        toolbar_layout.addWidget(self.start_btn)
+        toolbar_layout.addWidget(self.stop_btn)
+        toolbar_layout.addWidget(self.upload_all_btn)
+        toolbar_layout.addStretch()
+
+        # Right side buttons
         self.refresh_btn = QPushButton("↻")
-        self.refresh_btn.setToolTip("Refresh")
-        self.settings_btn = QPushButton("⛯")
-        self.settings_btn.setToolTip("Settings")
+        self.refresh_btn.setObjectName("icon_btn")
+        self.refresh_btn.setToolTip("Refresh Explorers")
+        self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        self.delete_btn = QPushButton("🗑️")
-        self.delete_btn.setToolTip("Delete File")
+        self.delete_btn = QPushButton("🗑")
+        self.delete_btn.setObjectName("icon_btn")
+        self.delete_btn.setToolTip("Delete Selected Item")
         self.delete_btn.setEnabled(False)
+        self.delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-        nav.addWidget(self.start_btn)
-        nav.addWidget(self.stop_btn)
-        nav.addWidget(self.upload_all_btn)
-        nav.addWidget(self.refresh_btn)
-        nav.addWidget(self.settings_btn)
-        nav.addWidget(self.delete_btn)
-        nav.addStretch()
-        nav.setContentsMargins(10, 5, 10, 5)
-        layout.addLayout(nav)
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setObjectName("icon_btn")
+        self.settings_btn.setToolTip("Settings")
+        self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-    def _setup_splitter(self, layout: QVBoxLayout):
+        toolbar_layout.addWidget(self.refresh_btn)
+        toolbar_layout.addWidget(self.delete_btn)
+        toolbar_layout.addWidget(self.settings_btn)
+
+        layout.addWidget(toolbar)
+
+    def _setup_status_bar(self, layout: QVBoxLayout) -> None:
+        """Create status bar with connection and monitoring status."""
+        status_bar = QFrame()
+        status_bar.setObjectName("status_bar")
+        status_bar.setStyleSheet("""
+            QFrame#status_bar {
+                background-color: #252526;
+                border-bottom: 1px solid #3e3e42;
+                padding: 6px 12px;
+            }
+        """)
+        
+        status_layout = QHBoxLayout(status_bar)
+        status_layout.setContentsMargins(12, 6, 12, 6)
+        status_layout.setSpacing(16)
+
+        # Connection status
+        self.connection_status_label = QLabel("● Disconnected")
+        self.connection_status_label.setObjectName("connection_disconnected")
+        self.connection_status_label.setStyleSheet("font-weight: 500;")
+
+        # Monitoring status
+        self.status_label = QLabel("⏸ Monitoring: Idle")
+        self.status_label.setStyleSheet("color: #858585; font-weight: 500;")
+
+        status_layout.addWidget(self.connection_status_label)
+        status_layout.addWidget(self.status_label)
+        status_layout.addStretch()
+
+        layout.addWidget(status_bar)
+
+    def _setup_content_area(self, layout: QVBoxLayout) -> None:
+        """Create main content area with file explorers."""
+        content_container = QWidget()
+        content_layout = QVBoxLayout(content_container)
+        content_layout.setContentsMargins(12, 12, 12, 12)
+        
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(2)
 
         self.watch_explorer = FileExplorerWidget(
             settings=self.settings,
             root_path=self.settings.local_watch_dir,
-            title="Watch Directory",
+            title="📁 Local Files",
         )
 
         self.pi_explorer = FileExplorerWidget(
             settings=self.settings,
             root_path=self.settings.remote_base_dir,
-            title="Raspberry Pi Files",
+            title="🥧 Raspberry Pi",
             is_remote=True,
             sftp=None,
         )
@@ -183,39 +256,75 @@ class MainWindow(QWidget):
         splitter.addWidget(self.pi_explorer)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
-        layout.addWidget(splitter)
+        
+        content_layout.addWidget(splitter)
+        layout.addWidget(content_container, stretch=1)
 
-    def _setup_connection_status_label(self, layout: QVBoxLayout) -> None:
-        self.connection_status_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.connection_status_label.setText("🟡 Status: Not Connected")
-        layout.addWidget(self.connection_status_label)
+    def _setup_activity_log(self, layout: QVBoxLayout) -> None:
+        """Create activity log section."""
+        log_container = QWidget()
+        log_layout = QVBoxLayout(log_container)
+        log_layout.setContentsMargins(12, 0, 12, 12)
+        log_layout.setSpacing(6)
 
-    def _setup_log_box(self, layout: QVBoxLayout) -> None:
-        layout.addWidget(self.log_box)
+        # Log header
+        log_header = QLabel("Activity Log")
+        log_header.setObjectName("section_header")
+        log_layout.addWidget(log_header)
 
-    def _setup_status_label(self, layout: QVBoxLayout) -> None:
-        self.status_label = QLabel("🛑 Status: Monitoring: Idle")
-        layout.addWidget(self.status_label)
+        # Log text box
+        self.log_box = QTextEdit()
+        self.log_box.setReadOnly(True)
+        self.log_box.setMaximumHeight(180)
+        self.log_box.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e;
+                border: 1px solid #3e3e42;
+                border-radius: 6px;
+                padding: 8px;
+                font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+                font-size: 12px;
+            }
+        """)
+        log_layout.addWidget(self.log_box)
+
+        layout.addWidget(log_container)
 
     def _setup_progress_bar(self, layout: QVBoxLayout) -> None:
+        """Create progress bar."""
+        progress_container = QWidget()
+        progress_layout = QVBoxLayout(progress_container)
+        progress_layout.setContentsMargins(12, 0, 12, 12)
+        
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("")
-        layout.addWidget(self.progress_bar)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setMinimumHeight(28)
+        
+        progress_layout.addWidget(self.progress_bar)
+        layout.addWidget(progress_container)
 
     # ------------------------------------------------------------------
     # Logging & Progress
     # ------------------------------------------------------------------
     def log(self, message: str) -> None:
+        """Append message to activity log."""
         self.log_box.append(message)
+        # Auto-scroll to bottom
+        scrollbar = self.log_box.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
     def update_progress(self, value: int) -> None:
+        """Update progress bar."""
         self.progress_bar.setValue(value)
         if value < 100:
-            self.progress_bar.setFormat(f"Uploading... {value}%")
+            self.progress_bar.setFormat(f"Transferring... {value}%")
         else:
-            self.progress_bar.setFormat("Upload Complete")
+            self.progress_bar.setFormat("✓ Transfer Complete")
+            # Reset after 2 seconds
+            QTimer.singleShot(2000, lambda: self.progress_bar.setFormat(""))
 
     # ------------------------------------------------------------------
     # Lifecycle Events
@@ -224,7 +333,7 @@ class MainWindow(QWidget):
         super().showEvent(event)
         QTimer.singleShot(150, self.controller.connect)
         if self.settings.auto_start_monitor:
-            self.controller.start_monitor()
+            QTimer.singleShot(300, self.controller.start_monitor)
 
     def closeEvent(self, event: QCloseEvent):
         """Called when user clicks the window's close button."""
@@ -233,7 +342,7 @@ class MainWindow(QWidget):
             f"Exit {SOFTWARE_NAME}",
             "Are you sure you want to quit?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
+            QMessageBox.StandardButton.No,
         )
 
         if reply == QMessageBox.StandardButton.Yes:
