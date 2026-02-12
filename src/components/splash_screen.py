@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QSplashScreen, QGraphicsDropShadowEffect
 from PySide6.QtGui import QPixmap, QColor, QPainter, QBrush
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 
 
 class SplashScreen(QSplashScreen):
@@ -24,6 +24,9 @@ class SplashScreen(QSplashScreen):
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
         self.duration = duration
+        self.min_duration_timer = None
+        self.ready_to_close = False
+        self.window_loaded = False
 
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
@@ -32,6 +35,40 @@ class SplashScreen(QSplashScreen):
         shadow.setColor(QColor(0, 0, 0, 80))  # semi-transparent black
         self.setGraphicsEffect(shadow)
 
-    def show_and_wait(self, callback):
+    def show_and_wait(self, callback, window=None):
+        """
+        Show splash screen and wait for both:
+        1. Minimum duration to elapse
+        2. Window to signal it's fully loaded
+        
+        Args:
+            callback: Function to call when ready to show main window
+            window: MainWindow instance to monitor for loaded signal
+        """
         self.show()
-        QTimer.singleShot(self.duration, callback)
+        self.callback = callback
+        
+        # Set minimum duration timer
+        self.min_duration_timer = QTimer()
+        self.min_duration_timer.setSingleShot(True)
+        self.min_duration_timer.timeout.connect(self._on_min_duration_elapsed)
+        self.min_duration_timer.start(self.duration)
+        
+        # Connect to window's loaded signal if provided
+        if window:
+            window.fully_loaded.connect(self._on_window_loaded)
+    
+    def _on_min_duration_elapsed(self):
+        """Called when minimum display duration has elapsed."""
+        self.ready_to_close = True
+        self._try_close()
+    
+    def _on_window_loaded(self):
+        """Called when main window signals it's fully loaded."""
+        self.window_loaded = True
+        self._try_close()
+    
+    def _try_close(self):
+        """Close splash only when both conditions are met."""
+        if self.ready_to_close and self.window_loaded:
+            self.callback()

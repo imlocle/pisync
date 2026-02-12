@@ -33,7 +33,7 @@ def main():
         splash.close()
         window.show()
 
-    splash.show_and_wait(start_main)
+    splash.show_and_wait(start_main, window)
     sys.exit(app.exec())
 
 

@@ -9,15 +9,15 @@ from paramiko import SFTPClient
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QListWidget,
+    QTreeWidget,
+    QTreeWidgetItem,
     QPushButton,
     QLabel,
     QHBoxLayout,
-    QListWidgetItem,
     QMenu,
     QInputDialog,
 )
-from PySide6.QtCore import Signal, Qt, QUrl, QPoint
+from PySide6.QtCore import Signal, Qt, QUrl, QPoint, QTimer
 from PySide6.QtGui import (
     QIcon,
     QDragEnterEvent,
@@ -33,6 +33,11 @@ from src.config.settings import Settings
 class FileExplorerWidget(QWidget):
     """
     A reusable file explorer widget for both local and remote (SFTP) directories.
+
+    Features:
+    - Tree view with icon, name, and size columns
+    - Disk usage display in title (for remote explorer)
+    - File/directory size formatting (MB/GB)
 
     Emits:
         - directory_changed(str): when current_path changes to a new directory
@@ -91,23 +96,27 @@ class FileExplorerWidget(QWidget):
         layout.addLayout(header_layout)
 
         # ------------------------------------------------------------------
-        # List widget
+        # Tree widget with columns
         # ------------------------------------------------------------------
-        self.list_widget: QListWidget = QListWidget()
-        self.list_widget.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
-        layout.addWidget(self.list_widget)
+        self.tree_widget: QTreeWidget = QTreeWidget()
+        self.tree_widget.setHeaderLabels(["Name", "Size"])
+        self.tree_widget.setColumnWidth(0, 300)  # Name column width
+        self.tree_widget.setColumnWidth(1, 100)  # Size column width
+        self.tree_widget.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
+        self.tree_widget.setRootIsDecorated(False)  # No expand arrows
+        layout.addWidget(self.tree_widget)
 
         self.back_btn.clicked.connect(self.go_back)
-        self.list_widget.itemSelectionChanged.connect(self._on_item_selected)
-        self.list_widget.itemDoubleClicked.connect(self.navigate)
+        self.tree_widget.itemSelectionChanged.connect(self._on_item_selected)
+        self.tree_widget.itemDoubleClicked.connect(self.navigate)
 
         # Context menu
-        self.list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.list_widget.customContextMenuRequested.connect(self.show_context_menu)
+        self.tree_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree_widget.customContextMenuRequested.connect(self.show_context_menu)
 
         # Drag & drop (both local + remote; remote emits files_dropped)
         self.setAcceptDrops(True)
-        self.list_widget.setAcceptDrops(True)
+        self.tree_widget.setAcceptDrops(True)
 
         self.refresh()
 
@@ -115,18 +124,18 @@ class FileExplorerWidget(QWidget):
     #  Context menu (delete / rename)
     # ------------------------------------------------------------------
     def show_context_menu(self, position: QPoint) -> None:
-        item = self.list_widget.itemAt(position)
+        item = self.tree_widget.itemAt(position)
         if not item:
             return
 
-        entry = item.text()
+        entry = item.text(0)  # Get name from first column
         full_path = os.path.join(self.current_path, entry)
 
         menu = QMenu(self)
         delete_action = menu.addAction("🗑️ Delete")
         rename_action = menu.addAction("✏️ Rename")
 
-        action = menu.exec(self.list_widget.mapToGlobal(position))
+        action = menu.exec(self.tree_widget.mapToGlobal(position))
 
         if action == delete_action:
             self.file_delete_requested.emit(full_path)
@@ -152,8 +161,19 @@ class FileExplorerWidget(QWidget):
         if path is not None:
             self.current_path = path
 
-        self.list_widget.clear()
-        self.title_label.setText(f"{self.title} ({self.current_path})")
+        self.tree_widget.clear()
+        
+        # Update title with disk usage for remote explorer
+        title_text = f"{self.title} ({self.current_path})"
+        if self.is_remote and self.sftp:
+            try:
+                disk_usage = self._get_disk_usage()
+                if disk_usage:
+                    title_text = f"{self.title} ({self.current_path}) - {disk_usage}"
+            except Exception:
+                pass  # Silently fail, just show path
+        
+        self.title_label.setText(title_text)
 
         try:
             if self.is_remote:
@@ -177,11 +197,16 @@ class FileExplorerWidget(QWidget):
             for entry in filtered_entries:
                 full_path = os.path.join(self.current_path, entry)
                 icon = self._get_icon(full_path)
-                self.list_widget.addItem(QListWidgetItem(icon, entry))
+                size_str = self._get_size_string(full_path)
+                
+                item = QTreeWidgetItem([entry, size_str])
+                item.setIcon(0, icon)
+                self.tree_widget.addTopLevelItem(item)
 
         except Exception as e:
             # Friendly UI message
-            self.list_widget.addItem(QListWidgetItem(f"⚠️ Error loading directory: {e}"))
+            error_item = QTreeWidgetItem([f"⚠️ Error loading directory: {e}", ""])
+            self.tree_widget.addTopLevelItem(error_item)
 
             # Remote recovery: reset view state so UI doesn't get "stuck"
             if self.is_remote:
@@ -204,8 +229,8 @@ class FileExplorerWidget(QWidget):
         # Let the app/controller decide how to recover
         self.remote_error.emit(error_msg)
 
-    def navigate(self, item: QListWidgetItem) -> None:
-        entry: str = item.text()
+    def navigate(self, item: QTreeWidgetItem) -> None:
+        entry: str = item.text(0)  # Get name from first column
         new_path: str = os.path.join(self.current_path, entry)
 
         try:
@@ -224,7 +249,8 @@ class FileExplorerWidget(QWidget):
                 else:
                     self.file_opened.emit(new_path)
         except Exception as e:
-            self.list_widget.addItem(QListWidgetItem(f"⚠️ Cannot open {entry}: {e}"))
+            error_item = QTreeWidgetItem([f"⚠️ Cannot open {entry}: {e}", ""])
+            self.tree_widget.addTopLevelItem(error_item)
             if self.is_remote:
                 self._reset_remote_state_after_failure(str(e))
 
@@ -239,11 +265,11 @@ class FileExplorerWidget(QWidget):
         self.sftp = sftp
 
     def _on_item_selected(self) -> None:
-        items = self.list_widget.selectedItems()
+        items = self.tree_widget.selectedItems()
         if not items:
             self.item_selected.emit("")
             return
-        entry = items[0].text()
+        entry = items[0].text(0)  # Get name from first column
         full_path = os.path.join(self.current_path, entry)
         self.item_selected.emit(full_path)
 
@@ -274,6 +300,99 @@ class FileExplorerWidget(QWidget):
             )
         except Exception:
             return QIcon.fromTheme("unknown")
+    
+    def _get_size_string(self, path: str) -> str:
+        """
+        Get human-readable size string for a file or directory.
+        For remote: only show file sizes (directories show "—" for speed)
+        For local: calculate directory sizes
+        """
+        try:
+            if self.is_remote:
+                if not self.sftp:
+                    return "—"
+                
+                # For remote, only show file sizes (not directory sizes for performance)
+                if self._is_remote_directory(path):
+                    return "—"  # Skip directory size calculation for speed
+                else:
+                    st = self.sftp.stat(path)
+                    return self._format_size(st.st_size)
+            else:
+                # Local: show both file and directory sizes
+                if os.path.isdir(path):
+                    size_bytes = self._get_local_dir_size(path)
+                else:
+                    size_bytes = os.path.getsize(path)
+                return self._format_size(size_bytes)
+        except Exception:
+            return "—"
+    
+    def _format_size(self, size_bytes: int) -> str:
+        """Format bytes into human-readable string."""
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        elif size_bytes < 1024 * 1024 * 1024:
+            return f"{size_bytes / (1024 * 1024):.1f} MB"
+        else:
+            return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+    
+    def _get_local_dir_size(self, path: str) -> int:
+        """Calculate total size of a local directory."""
+        total = 0
+        try:
+            for dirpath, dirnames, filenames in os.walk(path):
+                for filename in filenames:
+                    filepath = os.path.join(dirpath, filename)
+                    if os.path.exists(filepath):
+                        total += os.path.getsize(filepath)
+        except Exception:
+            pass
+        return total
+    
+    def _get_disk_usage(self) -> Optional[str]:
+        """
+        Get disk usage information for remote filesystem.
+        
+        Returns:
+            String like "45.2 GB / 128 GB" or None if unavailable
+        """
+        if not self.sftp:
+            return None
+        
+        try:
+            # Get SSH client from SFTP connection
+            ssh_client = self.sftp.get_channel().get_transport()
+            
+            # Execute df command to get disk usage
+            # -B1 gives output in bytes for accurate calculation
+            channel = ssh_client.open_session()
+            channel.exec_command(f"df -B1 {self.root_path} | tail -1")
+            
+            # Read output
+            output = channel.recv(1024).decode('utf-8').strip()
+            channel.close()
+            
+            if not output:
+                return None
+            
+            # Parse df output: Filesystem Size Used Avail Use% Mounted
+            parts = output.split()
+            if len(parts) < 4:
+                return None
+            
+            # parts[1] = total size, parts[2] = used size
+            total_bytes = int(parts[1])
+            used_bytes = int(parts[2])
+            
+            used_str = self._format_size(used_bytes)
+            total_str = self._format_size(total_bytes)
+            
+            return f"{used_str} / {total_str}"
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------
     # Drag & Drop

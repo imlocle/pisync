@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QFrame,
 )
-from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtCore import Qt, QTimer, QSize, Signal
 from PySide6.QtGui import QCloseEvent, QShowEvent, QIcon
 
 from src.components.settings_window import SettingsWindow
@@ -36,6 +36,8 @@ class MainWindow(QWidget):
     - Activity log with timestamps
     - Progress indicator
     """
+    
+    fully_loaded = Signal()  # Emitted when window is fully initialized
 
     def __init__(self) -> None:
         super().__init__()
@@ -71,10 +73,17 @@ class MainWindow(QWidget):
         # === 4. Connect logger ===
         logger.log_signal.connect(self.log)
         logger.progress_signal.connect(self.update_progress)
+        
+        # === 5. Signal that window is ready (after a short delay to allow UI to settle) ===
+        QTimer.singleShot(100, self._emit_fully_loaded)
 
     # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
+    def _emit_fully_loaded(self):
+        """Emit signal that window is fully loaded and ready."""
+        self.fully_loaded.emit()
+    
     def _validate_settings(self) -> bool:
         self.settings = Settings()
 
