@@ -1,9 +1,10 @@
-import os
 import sys
 from pathlib import Path
-from src.utils.logging_signal import logger
-from PySide6.QtGui import QPixmap, QPainter, QIcon
+
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPainter, QPixmap
+
+from src.utils.logging_signal import logger
 
 
 def get_path(path_base: str) -> Path:
@@ -21,7 +22,7 @@ def get_path(path_base: str) -> Path:
         - In development, uses the directory containing main.py as the base.
     """
     if getattr(sys, "_MEIPASS", False):
-        base_path = Path(sys._MEIPASS)
+        base_path = Path(sys._MEIPASS)  # type: ignore[attr-defined]
         full_path = base_path / path_base
         return full_path
     else:
@@ -68,8 +69,6 @@ def format_size(num_bytes: int) -> str:
         450000000 -> "429.2 MB"
     """
     try:
-        if num_bytes is None:
-            return "0 B"
         if num_bytes < 0:
             return f"{num_bytes} B"
 
@@ -86,9 +85,3 @@ def format_size(num_bytes: int) -> str:
     except Exception:
         return f"{num_bytes} B"
 
-
-def map_local_to_remote(local_path: str, watch_dir: str, pi_root_dir: str) -> str:
-    local_path = os.path.abspath(local_path)
-    watch_dir = os.path.abspath(watch_dir)
-    rel = os.path.relpath(local_path, watch_dir)
-    return os.path.join(pi_root_dir, rel).replace("\\", "/")

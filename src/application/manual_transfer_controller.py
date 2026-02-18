@@ -6,12 +6,13 @@ Handles user-initiated transfers (drag-and-drop, manual selection).
 
 from pathlib import Path
 from typing import List, Optional
+
 from PySide6.QtCore import QObject, QThread, Signal
 
 from src.application.path_mapper import PathMapper
 from src.config.settings import Settings
-from src.services.connection_manager_service import ConnectionManagerService
 from src.controllers.transfer_worker import TransferWorker
+from src.services.connection_manager_service import ConnectionManagerService
 from src.utils.logging_signal import logger
 
 

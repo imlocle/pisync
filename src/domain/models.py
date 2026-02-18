@@ -5,9 +5,9 @@ These models represent the core business entities and operations.
 """
 
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional, Literal
 from datetime import datetime
+from pathlib import Path
+from typing import Literal, Optional
 
 
 @dataclass

@@ -4,10 +4,10 @@ Local file system implementation.
 Provides file system operations for the local machine.
 """
 
-import os
+from datetime import datetime
 from pathlib import Path
 from typing import List
-from datetime import datetime
+
 from src.domain.models import FileInfo
 
 

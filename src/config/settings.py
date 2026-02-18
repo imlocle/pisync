@@ -1,11 +1,11 @@
-from pydantic import BaseModel, validator, field_validator
+import ipaddress
 import json
 import os
-import ipaddress
-from pathlib import Path
 import sys
-from src.utils.constants import CONFIG_JSON, SOFTWARE_NAME
-from src.utils.logging_signal import logger
+from pathlib import Path
+
+from pydantic import BaseModel, field_validator
+
 from src.models.errors import (
     ConfigurationLoadError,
     ConfigurationSaveError,
@@ -14,6 +14,8 @@ from src.models.errors import (
     PathValidationError,
     SSHKeyValidationError,
 )
+from src.utils.constants import CONFIG_JSON, SOFTWARE_NAME
+from src.utils.logging_signal import logger
 
 
 class SettingsConfig(BaseModel):
@@ -188,7 +190,8 @@ class SettingsConfig(BaseModel):
 
 
 class Settings:
-    _instance = None
+    _instance: "Settings | None" = None
+    config: SettingsConfig
 
     def __new__(cls):
         if cls._instance is None:
@@ -200,8 +203,8 @@ class Settings:
                 logger.success(f"Config: Loaded: {local_config_path}")
             else:
                 # Determine config file path for loading
-                if getattr(sys, "_MEIPASS", False):
-                    base_path = Path(sys._MEIPASS)
+                if getattr(sys, "_MEIPASS", None):  # type: ignore[attr-defined]
+                    base_path = Path(sys._MEIPASS)  # type: ignore[attr-defined]
                     config_path = base_path / f"src/config/{CONFIG_JSON}"
                 else:
                     config_path = Path(__file__).parent / CONFIG_JSON

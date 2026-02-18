@@ -1,8 +1,11 @@
 from __future__ import annotations
-from typing import Optional
-from PySide6.QtCore import QThread, Signal
-from paramiko import SFTPClient
+
 import os
+from typing import Optional
+
+from paramiko import SFTPClient
+from PySide6.QtCore import QThread, Signal
+
 from src.config.settings import Settings
 from src.repositories.file_monitor_repository import FileMonitorRepository
 from src.services.file_deletion_service import FileDeletionService

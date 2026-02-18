@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 import os
+
 from send2trash import send2trash
-from src.utils.logging_signal import logger
+
 from src.models.errors import FileDeletionError
+from src.utils.logging_signal import logger
 
 
 class FileDeletionService:

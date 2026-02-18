@@ -13,17 +13,18 @@ Classification is based purely on folder structure:
 
 import os
 import time
-from typing import Set, Dict, Optional
 from threading import Lock
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileSystemEvent
+from typing import Dict, Set
 
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
+from watchdog.observers import Observer
+
+from src.models.errors import FileMonitorError, FileStabilityError
 from src.services.file_deletion_service import FileDeletionService
 from src.services.movie_service import MovieService
 from src.services.tv_service import TvService
 from src.utils.constants import MOVIES_DIR, TV_SHOWS_DIR
 from src.utils.logging_signal import logger
-from src.models.errors import FileMonitorError, FileStabilityError
 
 
 class FileStabilityTracker:
@@ -95,7 +96,7 @@ class FileStabilityTracker:
                         f"Monitor: File stable: {os.path.basename(file_path)} "
                         f"({current_size} bytes)"
                     )
-                    logger.progress(100, 100)  # Complete
+                    logger.progress_signal.emit(100)  # Complete
                     return True
                 
                 # Not enough time has passed yet
@@ -104,7 +105,7 @@ class FileStabilityTracker:
                     f"Monitor: Waiting for stability: {os.path.basename(file_path)} "
                     f"({elapsed:.1f}/{self.stability_duration}s)"
                 )
-                logger.progress(progress, 100)  # Show progress
+                logger.progress_signal.emit(progress)  # Show progress
                 return False
                 
         except OSError as e:
@@ -240,10 +241,13 @@ class FileMonitorRepository(FileSystemEventHandler):
         Args:
             event: Watchdog file system event
         """
+        # Ensure src_path is a string
+        src_path = event.src_path if isinstance(event.src_path, str) else event.src_path.decode('utf-8')
+        
         if event.is_directory:
-            self._schedule_folder_processing(event.src_path)
+            self._schedule_folder_processing(src_path)
         else:
-            self._schedule_file_processing(event.src_path)
+            self._schedule_file_processing(src_path)
 
     def on_modified(self, event: FileSystemEvent) -> None:
         """
@@ -256,7 +260,9 @@ class FileMonitorRepository(FileSystemEventHandler):
             event: Watchdog file system event
         """
         if not event.is_directory:
-            self._schedule_file_processing(event.src_path)
+            # Ensure src_path is a string
+            src_path = event.src_path if isinstance(event.src_path, str) else event.src_path.decode('utf-8')
+            self._schedule_file_processing(src_path)
 
     def _schedule_file_processing(self, file_path: str) -> None:
         """

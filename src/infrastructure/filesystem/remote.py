@@ -4,10 +4,12 @@ Remote file system implementation using SFTP.
 Provides file system operations for remote servers via SSH/SFTP.
 """
 
-from pathlib import Path
-from typing import List, Optional
 from datetime import datetime
+from pathlib import Path
+from typing import List
+
 from paramiko import SFTPClient
+
 from src.domain.models import FileInfo
 from src.models.errors import ConnectionLostError, FileSystemError
 
@@ -72,6 +74,8 @@ class RemoteFileSystem:
         try:
             self._check_connection()
             stat = self.sftp.stat(str(path))
+            if stat.st_mode is None:
+                return False
             from stat import S_ISREG
             return S_ISREG(stat.st_mode)
         except (IOError, OSError):
@@ -90,6 +94,8 @@ class RemoteFileSystem:
         try:
             self._check_connection()
             stat = self.sftp.stat(str(path))
+            if stat.st_mode is None:
+                return False
             from stat import S_ISDIR
             return S_ISDIR(stat.st_mode)
         except (IOError, OSError):
@@ -138,6 +144,8 @@ class RemoteFileSystem:
         try:
             self._check_connection()
             stat = self.sftp.stat(str(path))
+            if stat.st_size is None:
+                return 0
             return stat.st_size
         except IOError as e:
             if "No such file" in str(e):
@@ -162,11 +170,21 @@ class RemoteFileSystem:
             self._check_connection()
             stat = self.sftp.stat(str(path))
             
+            # Get size, defaulting to 0 if None or if it's a directory
+            size_bytes = 0
+            if self.is_file(path) and stat.st_size is not None:
+                size_bytes = stat.st_size
+            
+            # Get modified time, defaulting to current time if None
+            modified_time = datetime.now()
+            if stat.st_mtime is not None:
+                modified_time = datetime.fromtimestamp(stat.st_mtime)
+            
             return FileInfo(
                 path=path,
                 is_directory=self.is_dir(path),
-                size_bytes=stat.st_size if self.is_file(path) else 0,
-                modified_time=datetime.fromtimestamp(stat.st_mtime),
+                size_bytes=size_bytes,
+                modified_time=modified_time,
                 is_remote=True
             )
         except IOError as e:

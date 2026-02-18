@@ -2,25 +2,24 @@ from __future__ import annotations
 
 import os
 import shutil
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from PySide6.QtWidgets import QMessageBox, QDialog
-
-from src.config.settings import Settings
-from src.services.connection_manager_service import ConnectionManagerService
-from src.components.settings_window import SettingsWindow
-from src.application.manual_transfer_controller import ManualTransferController
-from src.application.auto_sync_controller import AutoSyncController
-from src.utils.logging_signal import logger
 from paramiko import SFTPClient
+from PySide6.QtWidgets import QDialog, QMessageBox
 
+from src.application.auto_sync_controller import AutoSyncController
+from src.application.manual_transfer_controller import ManualTransferController
+from src.components.settings_window import SettingsWindow
+from src.config.settings import Settings
 from src.models.errors import (
-    SSHConnectionError,
     AuthenticationError,
+    ConnectionLostError,
     FileAccessError,
     FileDeletionError,
-    ConnectionLostError,
+    SSHConnectionError,
 )
+from src.services.connection_manager_service import ConnectionManagerService
+from src.utils.logging_signal import logger
 
 if TYPE_CHECKING:
     from src.components.main_window import MainWindow

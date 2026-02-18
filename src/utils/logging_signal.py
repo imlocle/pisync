@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from PySide6.QtCore import QObject, Signal
 
 
@@ -70,7 +71,7 @@ class Logger(QObject):
         formatted = self._format_message("🗑️", msg, "#ce9178")
         self.log_signal.emit(formatted)
 
-    def emit(self, msg: str):
+    def log(self, msg: str):
         """Emit raw message without formatting."""
         self.log_signal.emit(msg)
 

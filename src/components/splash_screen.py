@@ -1,6 +1,6 @@
-from PySide6.QtWidgets import QSplashScreen, QGraphicsDropShadowEffect
-from PySide6.QtGui import QPixmap, QColor, QPainter, QBrush
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QBrush, QColor, QPainter, QPixmap
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QSplashScreen
 
 
 class SplashScreen(QSplashScreen):

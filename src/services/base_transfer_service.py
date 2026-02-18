@@ -1,15 +1,17 @@
 from __future__ import annotations
+
 import os
-from typing import Optional
+
 import paramiko
+
+from src.models.errors import (
+    ConnectionLostError,
+    FileUploadError,
+    RemoteDirectoryError,
+    TransferVerificationError,
+)
 from src.services.file_deletion_service import FileDeletionService
 from src.utils.logging_signal import logger
-from src.models.errors import (
-    RemoteDirectoryError,
-    FileUploadError,
-    TransferVerificationError,
-    ConnectionLostError,
-)
 
 
 class BaseTransferService:

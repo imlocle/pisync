@@ -5,11 +5,12 @@ Handles automatic folder synchronization and monitoring.
 """
 
 from typing import Optional
+
 from PySide6.QtCore import QObject, Signal
 
 from src.config.settings import Settings
-from src.services.connection_manager_service import ConnectionManagerService
 from src.controllers.monitor_thread import MonitorThread
+from src.services.connection_manager_service import ConnectionManagerService
 from src.utils.logging_signal import logger
 
 

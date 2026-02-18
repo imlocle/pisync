@@ -9,24 +9,25 @@ Organized into logical sections:
 """
 
 from datetime import datetime
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextOption
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
-    QVBoxLayout,
+    QFormLayout,
+    QFrame,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QTextEdit,
-    QFormLayout,
-    QCheckBox,
     QMessageBox,
+    QPushButton,
     QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
     QWidget,
-    QGroupBox,
-    QFrame,
 )
-from PySide6.QtGui import QTextOption
-from PySide6.QtCore import Qt
 
 from src.config.settings import Settings, SettingsConfig
 from src.services.connection_manager_service import ConnectionManagerService
@@ -382,8 +383,10 @@ class SettingsWindow(QDialog):
             # Save to file
             self.settings.save_config(config_data)
             
-            # Update in-memory config
-            self.settings.config = validated_config
+            # Reload settings to update in-memory config
+            # The Settings singleton will reload from the saved file
+            Settings._instance = None  # Reset singleton
+            self.settings = Settings()  # Reload from saved config
 
             logger.success("Settings saved successfully")
             QMessageBox.information(

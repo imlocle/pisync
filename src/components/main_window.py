@@ -1,20 +1,20 @@
 from __future__ import annotations
 
+from PySide6.QtCore import QTimer, Qt, Signal
+from PySide6.QtGui import QCloseEvent, QShowEvent
 from PySide6.QtWidgets import (
-    QWidget,
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
     QPushButton,
+    QSplitter,
     QTextEdit,
     QVBoxLayout,
-    QLabel,
-    QHBoxLayout,
-    QSplitter,
-    QMessageBox,
-    QDialog,
-    QProgressBar,
-    QFrame,
+    QWidget,
 )
-from PySide6.QtCore import Qt, QTimer, QSize, Signal
-from PySide6.QtGui import QCloseEvent, QShowEvent, QIcon
 
 from src.components.settings_window import SettingsWindow
 from src.config.settings import Settings

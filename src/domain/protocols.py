@@ -5,8 +5,9 @@ Protocols define interfaces that implementations must follow,
 enabling dependency inversion and easier testing.
 """
 
-from typing import Protocol, List, Optional
 from pathlib import Path
+from typing import List, Protocol
+
 from src.domain.models import FileInfo
 
 

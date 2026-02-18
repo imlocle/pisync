@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Literal
+from typing import List, Literal, Optional
 
 from PySide6.QtCore import QObject, QThread
 
 from src.config.settings import Settings
-from src.services.connection_manager_service import ConnectionManagerService
 from src.controllers.transfer_worker import TransferWorker
+from src.services.connection_manager_service import ConnectionManagerService
 from src.utils.logging_signal import logger
 
 
@@ -69,7 +69,12 @@ class TransferController(QObject):
             return
 
         self._thread = QThread()
-        self._worker = TransferWorker(sftp=worker_sftp, request=req)
+        self._worker = TransferWorker(
+            sftp=worker_sftp,
+            local_paths=req.local_paths,
+            remote_root=req.remote_root,
+            parent=None  # No parent since it will be moved to thread
+        )
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
 

@@ -1,19 +1,19 @@
 from __future__ import annotations
-from typing import List
 
 import os
+from typing import List
 
 from paramiko import SFTPClient
 from PySide6.QtCore import QObject, Signal
 
-from src.utils.logging_signal import logger
-from src.utils.helper import format_size
 from src.models.errors import (
+    ConnectionLostError,
     FileUploadError,
     RemoteDirectoryError,
-    ConnectionLostError,
     TransferVerificationError,
 )
+from src.utils.helper import format_size
+from src.utils.logging_signal import logger
 
 
 class TransferWorker(QObject):

@@ -9,12 +9,13 @@ implementations (local vs remote).
 import time
 from pathlib import Path
 from typing import Callable, Optional
-from src.domain.models import TransferRequest, TransferResult, TransferProgress
+
+from src.domain.models import TransferProgress, TransferRequest, TransferResult
 from src.domain.protocols import FileSystem
 from src.models.errors import (
+    ConnectionLostError,
     FileUploadError,
     TransferVerificationError,
-    ConnectionLostError,
 )
 from src.utils.logging_signal import logger
 

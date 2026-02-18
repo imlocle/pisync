@@ -3,29 +3,29 @@ from __future__ import annotations
 import os
 import shutil
 from stat import S_ISDIR
-from typing import Optional, List
+from typing import List, Optional
 
 from paramiko import SFTPClient
-from PySide6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QPushButton,
-    QLabel,
-    QHBoxLayout,
-    QMenu,
-    QInputDialog,
-)
-from PySide6.QtCore import Signal, Qt, QUrl, QPoint
+from PySide6.QtCore import QPoint, Qt, QUrl, Signal
 from PySide6.QtGui import (
-    QIcon,
+    QColor,
     QDragEnterEvent,
     QDragLeaveEvent,
     QDropEvent,
-    QPainter,
-    QColor,
     QFont,
+    QIcon,
+    QPainter,
+)
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QMenu,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from src.config.settings import Settings
