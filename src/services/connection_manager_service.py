@@ -2,14 +2,13 @@ from __future__ import annotations
 import os
 from time import sleep
 from typing import Optional
-from paramiko import SSHClient, AutoAddPolicy, SSHException, AuthenticationException
+from paramiko import SSHClient, SFTPClient, AutoAddPolicy, SSHException, AuthenticationException
 from src.config.settings import Settings
 from src.utils.logging_signal import logger
 from src.models.errors import (
     SSHConnectionError,
     SFTPConnectionError,
     AuthenticationError,
-    ConnectionTimeoutError,
     FileAccessError,
 )
 
@@ -17,8 +16,8 @@ from src.models.errors import (
 class ConnectionManagerService:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.ssh_client = None
-        self.sftp_client = None
+        self.ssh_client: Optional[SSHClient] = None
+        self.sftp_client: Optional[SFTPClient] = None
 
     def connect(self) -> bool:
         """
@@ -156,7 +155,7 @@ class ConnectionManagerService:
             details=str(last_error) if last_error else "Unknown error"
         )
 
-    def open_sftp_session(self) -> Optional[SSHClient]:
+    def open_sftp_session(self) -> Optional[SFTPClient]:
         """
         Create a NEW SFTP client for a worker thread.
         This avoids thread contention with the UI explorer's SFTP.

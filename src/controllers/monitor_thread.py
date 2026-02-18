@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QThread, Signal
 from paramiko import SFTPClient
 import os
 from src.config.settings import Settings
@@ -12,6 +12,9 @@ from src.utils.logging_signal import logger
 
 
 class MonitorThread(QThread):
+    # Signal emitted after each file/folder is processed during scan
+    scan_progress = Signal(str, int, int)  # item_name, current, total
+    
     def __init__(
         self,
         settings: Settings,
@@ -63,7 +66,8 @@ class MonitorThread(QThread):
             while self._running:
                 self.msleep(500)
 
-            self.file_monitor_repo.stop_monitoring()
+            if self.file_monitor_repo:
+                self.file_monitor_repo.stop_monitoring()
 
         except Exception as e:
             logger.error(f"MonitorThread: {e}")
@@ -85,8 +89,19 @@ class MonitorThread(QThread):
             logger.info(f"{root} not found, skipping pre-scan.")
             return
 
-        # Scan Movies directory
+        # Count total items first
+        total_items = 0
         movies_dir = os.path.join(root, "Movies")
+        tv_dir = os.path.join(root, "TV_shows")
+        
+        if os.path.isdir(movies_dir):
+            total_items += len([f for f in os.listdir(movies_dir) if not f.startswith(".")])
+        if os.path.isdir(tv_dir):
+            total_items += len([f for f in os.listdir(tv_dir) if not f.startswith(".")])
+        
+        current_item = 0
+
+        # Scan Movies directory
         if os.path.isdir(movies_dir):
             logger.info(f"Scan: Processing Movies directory")
             for movie_folder in sorted(os.listdir(movies_dir)):
@@ -95,10 +110,14 @@ class MonitorThread(QThread):
                 local_folder = os.path.join(movies_dir, movie_folder)
                 if not os.path.isdir(local_folder):
                     continue
+                
+                current_item += 1
+                self.scan_progress.emit(movie_folder, current_item, total_items)
+                self.msleep(10)  # Small delay to allow GUI to update
                     
                 try:
                     logger.info(f"Scan: Movies: {movie_folder}")
-                    if self.movie_service.transfer_movie_folder(local_folder):
+                    if self.movie_service and self.movie_service.transfer_movie_folder(local_folder):
                         # Delete local folder after successful transfer
                         if self.settings.delete_after_transfer and self.file_monitor_repo:
                             self.file_monitor_repo.deletion_service.delete_folder(local_folder)
@@ -106,7 +125,6 @@ class MonitorThread(QThread):
                     logger.error(f"Scan: Movie transfer failed: {local_folder} - {e}")
 
         # Scan TV_shows directory
-        tv_dir = os.path.join(root, "TV_shows")
         if os.path.isdir(tv_dir):
             logger.info(f"Scan: Processing TV_shows directory")
             for show in sorted(os.listdir(tv_dir)):
@@ -115,10 +133,14 @@ class MonitorThread(QThread):
                 show_path = os.path.join(tv_dir, show)
                 if not os.path.isdir(show_path):
                     continue
+                
+                current_item += 1
+                self.scan_progress.emit(show, current_item, total_items)
+                self.msleep(10)  # Small delay to allow GUI to update
                     
                 try:
                     logger.info(f"Scan: TV show: {show}")
-                    if self.tv_service.transfer_tv_folder(show_path):
+                    if self.tv_service and self.tv_service.transfer_tv_folder(show_path):
                         # Delete only video files after successful transfer
                         if self.settings.delete_after_transfer and self.file_monitor_repo:
                             for root_dir, _, files in os.walk(show_path):

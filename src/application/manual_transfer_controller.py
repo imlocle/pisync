@@ -5,10 +5,9 @@ Handles user-initiated transfers (drag-and-drop, manual selection).
 """
 
 from pathlib import Path
-from typing import List, Optional, Callable
-from PySide6.QtCore import QObject, Signal
+from typing import List, Optional
+from PySide6.QtCore import QObject, QThread, Signal
 
-from src.domain.models import TransferRequest, TransferResult
 from src.application.path_mapper import PathMapper
 from src.config.settings import Settings
 from src.services.connection_manager_service import ConnectionManagerService
@@ -61,6 +60,7 @@ class ManualTransferController(QObject):
         )
         
         self._active_worker: Optional[TransferWorker] = None
+        self._active_thread: Optional[QThread] = None
         self._is_busy = False
     
     def is_busy(self) -> bool:
@@ -137,24 +137,37 @@ class ManualTransferController(QObject):
         # Create worker for transfer
         try:
             sftp = self.connection_manager.open_sftp_session()
-            if not sftp:
+            if sftp is None:
                 logger.error("Manual Transfer: Could not open SFTP session")
                 return False
             
+            # Create thread and worker
+            self._active_thread = QThread()
             self._active_worker = TransferWorker(
                 sftp=sftp,
                 local_paths=local_paths,
                 remote_root=remote_dir,
-                parent=self
+                parent=None  # No parent since it will be moved to thread
             )
             
+            # Move worker to thread
+            self._active_worker.moveToThread(self._active_thread)
+            
             # Connect signals
+            self._active_thread.started.connect(self._active_worker.run)
             self._active_worker.finished.connect(self._on_transfer_finished)
             self._active_worker.error.connect(self._on_transfer_error)
             
+            # Cleanup when done
+            self._active_worker.finished.connect(self._active_thread.quit)
+            self._active_worker.error.connect(self._active_thread.quit)
+            self._active_worker.finished.connect(self._active_worker.deleteLater)
+            self._active_worker.error.connect(self._active_worker.deleteLater)
+            self._active_thread.finished.connect(self._active_thread.deleteLater)
+            
             # Start transfer
             self._is_busy = True
-            self._active_worker.start()
+            self._active_thread.start()
             
             logger.start(f"Manual Transfer: Started {len(local_paths)} item(s)")
             self.transfer_started.emit(str(local_paths[0]))
@@ -186,11 +199,12 @@ class ManualTransferController(QObject):
         self._is_busy = False
         logger.success("Manual Transfer: Completed")
         
-        if self._active_worker:
+        if self._active_worker and self._active_worker.local_paths:
             # Get the first path for signal
-            if self._active_worker.local_paths:
-                self.transfer_completed.emit(self._active_worker.local_paths[0])
-            self._active_worker = None
+            self.transfer_completed.emit(self._active_worker.local_paths[0])
+        
+        self._active_worker = None
+        self._active_thread = None
     
     def _on_transfer_error(self, error_msg: str) -> None:
         """Handle transfer error."""
@@ -201,6 +215,7 @@ class ManualTransferController(QObject):
             self.transfer_failed.emit(self._active_worker.local_paths[0], error_msg)
         
         self._active_worker = None
+        self._active_thread = None
     
     def get_transfer_preview(self, local_paths: List[str]) -> dict:
         """

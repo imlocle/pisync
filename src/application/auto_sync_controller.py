@@ -4,7 +4,6 @@ Auto sync controller.
 Handles automatic folder synchronization and monitoring.
 """
 
-from pathlib import Path
 from typing import Optional
 from PySide6.QtCore import QObject, Signal
 
@@ -34,6 +33,7 @@ class AutoSyncController(QObject):
     file_detected = Signal(str)  # path
     file_transferred = Signal(str)  # path
     transfer_failed = Signal(str, str)  # path, error
+    scan_progress = Signal(str, int, int)  # item_name, current, total
     
     def __init__(
         self,
@@ -79,11 +79,19 @@ class AutoSyncController(QObject):
                 return False
         
         try:
+            # Ensure SFTP client exists
+            if not self.connection_manager.sftp_client:
+                logger.error("Auto Sync: No SFTP client available")
+                return False
+            
             # Create and start monitor thread
             self._monitor_thread = MonitorThread(
                 settings=self.settings,
                 sftp_client=self.connection_manager.sftp_client
             )
+            
+            # Connect monitor thread signals
+            self._monitor_thread.scan_progress.connect(self.scan_progress.emit)
             
             self._monitor_thread.start()
             self._is_monitoring = True

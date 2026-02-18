@@ -12,6 +12,8 @@ from src.components.settings_window import SettingsWindow
 from src.application.manual_transfer_controller import ManualTransferController
 from src.application.auto_sync_controller import AutoSyncController
 from src.utils.logging_signal import logger
+from paramiko import SFTPClient
+
 from src.models.errors import (
     SSHConnectionError,
     AuthenticationError,
@@ -76,6 +78,7 @@ class MainWindowController:
         # Auto sync signals
         self.auto_sync.monitoring_started.connect(self._on_monitoring_started)
         self.auto_sync.monitoring_stopped.connect(self._on_monitoring_stopped)
+        self.auto_sync.scan_progress.connect(self._on_scan_progress)
 
     # --------------------------------------------------------------
     #  SIGNAL HANDLERS
@@ -117,6 +120,11 @@ class MainWindowController:
         self.view.start_btn.setEnabled(True)
         self.view.stop_btn.setEnabled(False)
         self.view.upload_all_btn.setEnabled(False)
+    
+    def _on_scan_progress(self, item_name: str, current: int, total: int) -> None:
+        """Handle scan progress updates."""
+        self.view.status_label.setText(f"🔍 Scanning: {item_name} ({current}/{total})")
+        self.view.status_label.setStyleSheet("color: #007acc; font-weight: 500;")
 
     # --------------------------------------------------------------
     #  CONNECTION MANAGEMENT
@@ -298,6 +306,8 @@ class MainWindowController:
             )
 
     def _is_remote_dir(self, path: str) -> bool:
+        if not self.connection_manager.sftp_client:
+            return False
         try:
             self.connection_manager.sftp_client.listdir(path)
             return True
@@ -342,7 +352,7 @@ class MainWindowController:
                 details=str(e)
             )
 
-    def _delete_remote_dir(self, path: str, sftp) -> None:
+    def _delete_remote_dir(self, path: str, sftp: SFTPClient) -> None:
         """
         Recursively delete remote directory.
         

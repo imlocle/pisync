@@ -95,13 +95,16 @@ class FileStabilityTracker:
                         f"Monitor: File stable: {os.path.basename(file_path)} "
                         f"({current_size} bytes)"
                     )
+                    logger.progress(100, 100)  # Complete
                     return True
                 
                 # Not enough time has passed yet
+                progress = int((elapsed / self.stability_duration) * 100)
                 logger.info(
                     f"Monitor: Waiting for stability: {os.path.basename(file_path)} "
                     f"({elapsed:.1f}/{self.stability_duration}s)"
                 )
+                logger.progress(progress, 100)  # Show progress
                 return False
                 
         except OSError as e:

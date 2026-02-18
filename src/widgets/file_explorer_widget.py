@@ -17,10 +17,11 @@ from PySide6.QtWidgets import (
     QMenu,
     QInputDialog,
 )
-from PySide6.QtCore import Signal, Qt, QUrl, QPoint, QTimer
+from PySide6.QtCore import Signal, Qt, QUrl, QPoint
 from PySide6.QtGui import (
     QIcon,
     QDragEnterEvent,
+    QDragLeaveEvent,
     QDropEvent,
     QPainter,
     QColor,
@@ -28,6 +29,7 @@ from PySide6.QtGui import (
 )
 
 from src.config.settings import Settings
+from src.utils.logging_signal import logger
 
 
 class FileExplorerWidget(QWidget):
@@ -281,6 +283,8 @@ class FileExplorerWidget(QWidget):
             return False
         try:
             st = self.sftp.stat(path)
+            if st.st_mode is None:
+                return False
             return S_ISDIR(st.st_mode)
         except Exception:
             return False
@@ -317,6 +321,8 @@ class FileExplorerWidget(QWidget):
                     return "—"  # Skip directory size calculation for speed
                 else:
                     st = self.sftp.stat(path)
+                    if st.st_size is None:
+                        return "—"
                     return self._format_size(st.st_size)
             else:
                 # Local: show both file and directory sizes
@@ -364,16 +370,22 @@ class FileExplorerWidget(QWidget):
         
         try:
             # Get SSH client from SFTP connection
-            ssh_client = self.sftp.get_channel().get_transport()
+            channel = self.sftp.get_channel()
+            if not channel:
+                return None
+            
+            transport = channel.get_transport()
+            if not transport:
+                return None
             
             # Execute df command to get disk usage
             # -B1 gives output in bytes for accurate calculation
-            channel = ssh_client.open_session()
-            channel.exec_command(f"df -B1 {self.root_path} | tail -1")
+            session = transport.open_session()
+            session.exec_command(f"df -B1 {self.root_path} | tail -1")
             
             # Read output
-            output = channel.recv(1024).decode('utf-8').strip()
-            channel.close()
+            output = session.recv(1024).decode('utf-8').strip()
+            session.close()
             
             if not output:
                 return None
@@ -412,7 +424,7 @@ class FileExplorerWidget(QWidget):
         self.update()
         event.acceptProposedAction()
 
-    def dragLeaveEvent(self, event: QDragEnterEvent) -> None:
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:
         self.drag_over = False
         self.update()
 
@@ -440,18 +452,16 @@ class FileExplorerWidget(QWidget):
             self.update()
             return
 
-        # Local explorer: copy into current directory
+        # Local explorer: move into current directory (not copy)
         for src in local_paths:
             if not os.path.exists(src):
                 continue
             dst = os.path.join(self.current_path, os.path.basename(src))
             try:
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(src, dst)
+                shutil.move(src, dst)
+                logger.info(f"Moved: {os.path.basename(src)} -> {self.current_path}")
             except Exception as e:
-                print(f"Error copying {src}: {e}")
+                logger.error(f"Error moving {src}: {e}")
 
         self.refresh()
         self.drag_over = False
