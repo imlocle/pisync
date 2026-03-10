@@ -28,7 +28,11 @@ class SettingsConfig(BaseModel):
     3. Sync behavior settings
     """
     
-    # Connection Settings
+    # Multi-server support
+    servers: dict[str, dict] = {}  # server_id -> server config
+    current_server_id: str = ""  # Currently selected server
+    
+    # Connection Settings (for backward compatibility)
     pi_user: str = ""
     pi_ip: str = ""
     ssh_key_path: str = os.path.expanduser("~/.ssh/id_rsa")
@@ -39,7 +43,7 @@ class SettingsConfig(BaseModel):
     remote_base_dir: str = "/mnt/external"
     
     # Sync Behavior Settings
-    auto_start_monitor: bool = True
+    auto_start_monitor: bool = False  # Changed default to False - don't auto-connect
     delete_after_transfer: bool = True
     file_extensions: set[str] = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".srt", ".nfo"}
     skip_patterns: set[str] = {".DS_Store", "Thumbs.db", ".Trashes", "._*"}
@@ -412,3 +416,106 @@ class Settings:
                 self.local_watch_dir.strip(),
             ]
         )
+
+    def get_servers(self) -> dict[str, dict]:
+        """
+        Get all saved servers.
+        
+        Returns:
+            Dictionary of server_id -> server config
+        """
+        return self.config.servers.copy()
+
+    def get_server(self, server_id: str) -> dict | None:
+        """
+        Get a specific server configuration.
+        
+        Args:
+            server_id: Server identifier
+            
+        Returns:
+            Server configuration dict or None if not found
+        """
+        return self.config.servers.get(server_id)
+
+    def add_server(self, server_id: str, server_config: dict) -> None:
+        """
+        Add or update a server configuration.
+        
+        Args:
+            server_id: Unique server identifier
+            server_config: Server configuration dictionary
+        """
+        self.config.servers[server_id] = server_config
+        
+        # Save to disk
+        config_data = self._config_to_dict()
+        self.save_config(config_data)
+
+    def delete_server(self, server_id: str) -> None:
+        """
+        Delete a server configuration.
+        
+        Args:
+            server_id: Server identifier to delete
+        """
+        if server_id in self.config.servers:
+            del self.config.servers[server_id]
+            
+            # If this was the current server, clear it
+            if self.config.current_server_id == server_id:
+                self.config.current_server_id = ""
+            
+            # Save to disk
+            config_data = self._config_to_dict()
+            self.save_config(config_data)
+
+    def load_server(self, server_id: str) -> bool:
+        """
+        Load a server configuration as the current active server.
+        
+        Args:
+            server_id: Server identifier to load
+            
+        Returns:
+            True if server was loaded successfully, False otherwise
+        """
+        server_config = self.config.servers.get(server_id)
+        if not server_config:
+            logger.error(f"Settings: Server not found: {server_id}")
+            return False
+        
+        # Update current connection settings
+        self.config.pi_user = server_config.get("pi_user", "")
+        self.config.pi_ip = server_config.get("pi_ip", "")
+        self.config.ssh_key_path = server_config.get("ssh_key_path", os.path.expanduser("~/.ssh/id_rsa"))
+        self.config.ssh_port = server_config.get("ssh_port", 22)
+        self.config.remote_base_dir = server_config.get("remote_base_dir", "/mnt/external")
+        self.config.current_server_id = server_id
+        
+        logger.info(f"Settings: Loaded server: {server_config.get('name', server_id)}")
+        return True
+
+    def _config_to_dict(self) -> dict:
+        """
+        Convert current config to dictionary for saving.
+        
+        Returns:
+            Configuration dictionary
+        """
+        return {
+            "servers": self.config.servers,
+            "current_server_id": self.config.current_server_id,
+            "pi_user": self.config.pi_user,
+            "pi_ip": self.config.pi_ip,
+            "ssh_key_path": self.config.ssh_key_path,
+            "ssh_port": self.config.ssh_port,
+            "local_watch_dir": self.config.local_watch_dir,
+            "remote_base_dir": self.config.remote_base_dir,
+            "auto_start_monitor": self.config.auto_start_monitor,
+            "delete_after_transfer": self.config.delete_after_transfer,
+            "stability_duration": self.config.stability_duration,
+            "file_extensions": list(self.config.file_extensions),
+            "skip_patterns": list(self.config.skip_patterns),
+            "last_modified": self.config.last_modified,
+        }

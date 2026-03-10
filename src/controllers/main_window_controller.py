@@ -78,6 +78,7 @@ class MainWindowController:
         self.auto_sync.monitoring_started.connect(self._on_monitoring_started)
         self.auto_sync.monitoring_stopped.connect(self._on_monitoring_stopped)
         self.auto_sync.scan_progress.connect(self._on_scan_progress)
+        self.auto_sync.file_transferred.connect(self._on_auto_transfer_completed)
 
     # --------------------------------------------------------------
     #  SIGNAL HANDLERS
@@ -92,6 +93,12 @@ class MainWindowController:
         logger.success(f"UI: Manual transfer completed: {path}")
         self.view.upload_all_btn.setEnabled(True)
         self.refresh_explorers()
+    
+    def _on_auto_transfer_completed(self, path: str) -> None:
+        """Handle automatic transfer completed."""
+        # Refresh local explorer to show updated file list
+        if hasattr(self.view, 'local_explorer'):
+            self.view.local_explorer.refresh()
     
     def _on_manual_transfer_failed(self, path: str, error: str) -> None:
         """Handle manual transfer failed."""
@@ -135,8 +142,12 @@ class MainWindowController:
                 self.view.connection_status_label.setText("● Disconnected")
                 self.view.connection_status_label.setObjectName("connection_disconnected")
                 self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
+                self.view.handle_connection_failure()
                 return
 
+            # Connection successful - reset attempt counter
+            self.view.connection_attempts = 0
+            
             self.view.connection_status_label.setText(f"● Connected to {self.settings.pi_ip}")
             self.view.connection_status_label.setObjectName("connection_connected")
             self.view.connection_status_label.setStyle(self.view.connection_status_label.style())
@@ -157,6 +168,7 @@ class MainWindowController:
                 f"{e.message}\n\n{e.details if e.details else ''}",
                 QMessageBox.StandardButton.Ok
             )
+            self.view.handle_connection_failure()
         except FileAccessError as e:
             self.view.connection_status_label.setText("● SSH Key Error")
             self.view.connection_status_label.setObjectName("connection_disconnected")
@@ -167,6 +179,7 @@ class MainWindowController:
                 f"{e.message}\n\n{e.details if e.details else ''}",
                 QMessageBox.StandardButton.Ok
             )
+            self.view.handle_connection_failure()
         except SSHConnectionError as e:
             self.view.connection_status_label.setText("● Connection Failed")
             self.view.connection_status_label.setObjectName("connection_disconnected")
@@ -177,6 +190,7 @@ class MainWindowController:
                 f"{e.message}\n\n{e.details if e.details else ''}",
                 QMessageBox.StandardButton.Ok
             )
+            self.view.handle_connection_failure()
         except Exception as e:
             self.view.connection_status_label.setText("● Error")
             self.view.connection_status_label.setObjectName("connection_disconnected")
@@ -188,6 +202,7 @@ class MainWindowController:
                 f"An unexpected error occurred:\n{str(e)}",
                 QMessageBox.StandardButton.Ok
             )
+            self.view.handle_connection_failure()
 
     def check_connection(self) -> None:
         """Check connection and reconnect if needed."""

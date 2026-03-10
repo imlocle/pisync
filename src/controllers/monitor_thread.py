@@ -17,6 +17,8 @@ from src.utils.logging_signal import logger
 class MonitorThread(QThread):
     # Signal emitted after each file/folder is processed during scan
     scan_progress = Signal(str, int, int)  # item_name, current, total
+    # Signal emitted after a file transfer completes
+    transfer_completed = Signal(str)  # file_path
     
     def __init__(
         self,
@@ -61,6 +63,7 @@ class MonitorThread(QThread):
                 deletion_service=deletion,
                 file_exts=self.settings.file_extensions,
                 stability_duration=self.settings.stability_duration,
+                transfer_callback=self._on_transfer_completed,
             )
 
             self.file_monitor_repo.create_directories()
@@ -162,3 +165,13 @@ class MonitorThread(QThread):
                     logger.error(f"Scan: TV show transfer failed: {show_path} - {e}")
 
         logger.success(f"Scan: Complete: {root}")
+
+    
+    def _on_transfer_completed(self, file_path: str) -> None:
+        """
+        Callback when a file transfer completes.
+        
+        Args:
+            file_path: Path to the file that was transferred
+        """
+        self.transfer_completed.emit(file_path)
