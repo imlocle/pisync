@@ -435,13 +435,26 @@ class FileMonitorRepository(FileSystemEventHandler):
                     self._mark_as_processed(folder)
                     self.deletion_service.delete_folder(folder)
                     logger.success(f"Monitor: Movie transfer complete: {os.path.basename(folder)}")
+                    # Clear retry count on success
+                    self._retry_counts.pop(file_path, None)
                     # Notify callback
                     if self.transfer_callback:
                         self.transfer_callback(file_path)
                 else:
-                    # Transfer failed - re-queue for retry
-                    logger.error(f"Monitor: Movie transfer failed for: {folder} - will retry")
-                    self.stable_files_queue.put(file_path)
+                    # Transfer failed - check retry count
+                    retry_count = self._retry_counts.get(file_path, 0)
+                    if retry_count < self._max_retries:
+                        self._retry_counts[file_path] = retry_count + 1
+                        logger.error(
+                            f"Monitor: Movie transfer failed for: {folder} - "
+                            f"retry {retry_count + 1}/{self._max_retries}"
+                        )
+                        self.stable_files_queue.put(file_path)
+                    else:
+                        logger.error(
+                            f"Monitor: Movie transfer failed permanently after {self._max_retries} attempts: {folder}"
+                        )
+                        self._retry_counts.pop(file_path, None)
                     
             elif dest_type == "tv":
                 # Transfer TV show folder (preserves structure)
@@ -453,18 +466,38 @@ class FileMonitorRepository(FileSystemEventHandler):
                     if ext in self.file_exts:
                         self.deletion_service.delete_file(file_path)
                     logger.success(f"Monitor: TV show transfer complete: {name}")
+                    # Clear retry count on success
+                    self._retry_counts.pop(file_path, None)
                     # Notify callback
                     if self.transfer_callback:
                         self.transfer_callback(file_path)
                 else:
-                    # Transfer failed - re-queue for retry
-                    logger.error(f"Monitor: TV show transfer failed for: {folder} - will retry")
-                    self.stable_files_queue.put(file_path)
+                    # Transfer failed - check retry count
+                    retry_count = self._retry_counts.get(file_path, 0)
+                    if retry_count < self._max_retries:
+                        self._retry_counts[file_path] = retry_count + 1
+                        logger.error(
+                            f"Monitor: TV show transfer failed for: {folder} - "
+                            f"retry {retry_count + 1}/{self._max_retries}"
+                        )
+                        self.stable_files_queue.put(file_path)
+                    else:
+                        logger.error(
+                            f"Monitor: TV show transfer failed permanently after {self._max_retries} attempts: {folder}"
+                        )
+                        self._retry_counts.pop(file_path, None)
                     
         except Exception as e:
             logger.error(f"Monitor: Transfer error for {file_path}: {e}")
-            # Re-queue for retry
-            self.stable_files_queue.put(file_path)
+            # Check retry count for exceptions too
+            retry_count = self._retry_counts.get(file_path, 0)
+            if retry_count < self._max_retries:
+                self._retry_counts[file_path] = retry_count + 1
+                logger.error(f"Monitor: Will retry - attempt {retry_count + 1}/{self._max_retries}")
+                self.stable_files_queue.put(file_path)
+            else:
+                logger.error(f"Monitor: Transfer failed permanently after {self._max_retries} attempts")
+                self._retry_counts.pop(file_path, None)
             # Clear from processed so it can be retried
             with self._processed_lock:
                 self._processed_items.discard(file_path)
@@ -514,13 +547,26 @@ class FileMonitorRepository(FileSystemEventHandler):
                     self._mark_as_processed(folder_path)
                     self.deletion_service.delete_folder(folder_path)
                     logger.success(f"Monitor: Movie folder transfer complete: {name}")
+                    # Clear retry count on success
+                    self._retry_counts.pop(folder_path, None)
                     # Notify callback
                     if self.transfer_callback:
                         self.transfer_callback(folder_path)
                 else:
-                    # Transfer failed - re-queue for retry
-                    logger.error(f"Monitor: Movie folder transfer failed for: {folder_path} - will retry")
-                    self.stable_files_queue.put(folder_path)
+                    # Transfer failed - check retry count
+                    retry_count = self._retry_counts.get(folder_path, 0)
+                    if retry_count < self._max_retries:
+                        self._retry_counts[folder_path] = retry_count + 1
+                        logger.error(
+                            f"Monitor: Movie folder transfer failed for: {folder_path} - "
+                            f"retry {retry_count + 1}/{self._max_retries}"
+                        )
+                        self.stable_files_queue.put(folder_path)
+                    else:
+                        logger.error(
+                            f"Monitor: Movie folder transfer failed permanently after {self._max_retries} attempts: {folder_path}"
+                        )
+                        self._retry_counts.pop(folder_path, None)
                     
             elif dest_type == "tv":
                 # Transfer TV show folder (preserves structure)
@@ -540,18 +586,38 @@ class FileMonitorRepository(FileSystemEventHandler):
                                 except Exception as e:
                                     logger.warn(f"Monitor: Could not delete {f}: {e}")
                     logger.success(f"Monitor: TV show folder transfer complete: {name}")
+                    # Clear retry count on success
+                    self._retry_counts.pop(folder_path, None)
                     # Notify callback
                     if self.transfer_callback:
                         self.transfer_callback(folder_path)
                 else:
-                    # Transfer failed - re-queue for retry
-                    logger.error(f"Monitor: TV show folder transfer failed for: {folder_path} - will retry")
-                    self.stable_files_queue.put(folder_path)
+                    # Transfer failed - check retry count
+                    retry_count = self._retry_counts.get(folder_path, 0)
+                    if retry_count < self._max_retries:
+                        self._retry_counts[folder_path] = retry_count + 1
+                        logger.error(
+                            f"Monitor: TV show folder transfer failed for: {folder_path} - "
+                            f"retry {retry_count + 1}/{self._max_retries}"
+                        )
+                        self.stable_files_queue.put(folder_path)
+                    else:
+                        logger.error(
+                            f"Monitor: TV show folder transfer failed permanently after {self._max_retries} attempts: {folder_path}"
+                        )
+                        self._retry_counts.pop(folder_path, None)
                     
         except Exception as e:
             logger.error(f"Monitor: Transfer error for folder {folder_path}: {e}")
-            # Re-queue for retry
-            self.stable_files_queue.put(folder_path)
+            # Check retry count for exceptions too
+            retry_count = self._retry_counts.get(folder_path, 0)
+            if retry_count < self._max_retries:
+                self._retry_counts[folder_path] = retry_count + 1
+                logger.error(f"Monitor: Will retry - attempt {retry_count + 1}/{self._max_retries}")
+                self.stable_files_queue.put(folder_path)
+            else:
+                logger.error(f"Monitor: Transfer failed permanently after {self._max_retries} attempts")
+                self._retry_counts.pop(folder_path, None)
             # Clear from processed so it can be retried
             with self._processed_lock:
                 self._processed_items.discard(folder_path)
