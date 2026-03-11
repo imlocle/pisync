@@ -171,7 +171,7 @@ class SettingsConfig(BaseModel):
             data["skip_files"] = set(data["skip_files"])
 
         # Ensure auto_start_monitor has a default
-        data["auto_start_monitor"] = data.get("auto_start_monitor", True)
+        data["auto_start_monitor"] = data.get("auto_start_monitor", False)
 
         # Ensure delete_after_transfer has a default
         data["delete_after_transfer"] = data.get("delete_after_transfer", True)

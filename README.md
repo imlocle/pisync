@@ -82,7 +82,7 @@ Settings stored in `~/.PiSync/config.json`:
 ```json
 {
   "pi_ip": "192.168.1.100",
-  "pi_username": "pi",
+  "pi_user": "pi",
   "ssh_key_path": "~/.ssh/id_rsa",
   "local_watch_dir": "~/Transfers",
   "remote_base_dir": "/mnt/external",

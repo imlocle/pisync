@@ -62,6 +62,11 @@ class FileStabilityTracker:
         Args:
             stable_files_queue: Queue to enqueue stable file paths for main thread processing
         """
+        # Guard against multiple polling threads
+        if self._polling_thread and self._polling_thread.is_alive():
+            logger.warn("Monitor: Polling thread already running, stopping existing thread first")
+            self.stop_polling()
+        
         self._stable_files_queue = stable_files_queue
         self._stop_event.clear()
         self._polling_thread = Thread(target=self._poll_files, daemon=True)
@@ -269,6 +274,11 @@ class FileMonitorRepository(FileSystemEventHandler):
             FileMonitorError: If monitoring cannot be started
         """
         try:
+            # Guard against multiple starts
+            if self.observer.is_alive():
+                logger.warn("Monitor: Observer already running, skipping start")
+                return
+            
             # Start the stability polling thread with queue
             self.stability_tracker.start_polling(self.stable_files_queue)
             

@@ -97,8 +97,8 @@ class MainWindowController:
     def _on_auto_transfer_completed(self, path: str) -> None:
         """Handle automatic transfer completed."""
         # Refresh local explorer to show updated file list
-        if hasattr(self.view, 'local_explorer'):
-            self.view.local_explorer.refresh()
+        if hasattr(self.view, 'watch_explorer'):
+            self.view.watch_explorer.refresh()
     
     def _on_manual_transfer_failed(self, path: str, error: str) -> None:
         """Handle manual transfer failed."""

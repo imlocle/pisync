@@ -377,7 +377,7 @@ Location: `~/.PiSync/config.json`
 ```json
 {
   "pi_ip": "192.168.1.100",
-  "pi_username": "pi",
+  "pi_user": "pi",
   "ssh_key_path": "~/.ssh/id_rsa",
   "ssh_port": 22,
   "local_watch_dir": "~/Transfers",

@@ -261,7 +261,7 @@ class SettingsWindow(QDialog):
 
         self.auto_start_monitor_checkbox = QCheckBox()
         self.auto_start_monitor_checkbox.setChecked(
-            getattr(self.settings, "auto_start_monitor", True)
+            getattr(self.settings, "auto_start_monitor", False)
         )
 
         self.stability_duration_input = QLineEdit(str(self.settings.stability_duration))
@@ -603,8 +603,19 @@ class SettingsWindow(QDialog):
         
         # Create temporary settings for testing
         if self.server_mode:
-            # Use values from the form
+            # Use values from the form - create a lightweight settings-like object
+            # to avoid mutating the singleton Settings
             from src.config.settings import SettingsConfig
+            
+            class TempSettings:
+                """Temporary settings object for connection testing without mutating singleton."""
+                def __init__(self, config: SettingsConfig):
+                    self.config = config
+                    self.pi_user = config.pi_user
+                    self.pi_ip = config.pi_ip
+                    self.ssh_key_path = config.ssh_key_path
+                    self.ssh_port = config.ssh_port
+            
             temp_config_data = {
                 "pi_user": self.pi_user_input.text().strip(),
                 "pi_ip": self.pi_ip_input.text().strip(),
@@ -615,8 +626,7 @@ class SettingsWindow(QDialog):
             }
             try:
                 temp_config = SettingsConfig.from_json(temp_config_data)
-                temp_settings = Settings()
-                temp_settings.config = temp_config
+                temp_settings = TempSettings(temp_config)
                 connection_manager_service = ConnectionManagerService(temp_settings)
             except Exception as e:
                 self.connection_status_label.setText("● Invalid configuration")

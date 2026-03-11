@@ -97,7 +97,12 @@ class MainWindow(QWidget):
         QTimer.singleShot(200, self._auto_connect_and_start)
     
     def _auto_connect_and_start(self):
-        """Automatically connect and start monitoring after window loads."""
+        """Automatically connect and start monitoring after window loads (if enabled in settings)."""
+        # Only auto-connect if auto_start_monitor is enabled
+        if not self.settings.auto_start_monitor:
+            logger.info("Auto-connect disabled in settings")
+            return
+        
         # Connect to the server
         self.controller.connect()
         
@@ -238,7 +243,7 @@ class MainWindow(QWidget):
     def change_server(self):
         """Allow user to change to a different server."""
         # Stop monitoring if active
-        if hasattr(self.controller, 'monitor_thread') and self.controller.monitor_thread:
+        if self.controller.auto_sync.is_monitoring():
             self.controller.stop_monitor()
         
         # Disconnect current connection
@@ -312,7 +317,6 @@ class MainWindow(QWidget):
         self.connect_btn.setObjectName("primary_btn")
         self.connect_btn.setMinimumHeight(36)
         self.connect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.connect_btn.clicked.connect(self.controller.connect)
 
         # Start button
         self.start_btn = QPushButton("▶  Start Monitoring")
