@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from queue import Queue, Empty
 from typing import Optional
 
 from paramiko import SFTPClient
@@ -29,6 +30,7 @@ class MonitorThread(QThread):
         self.settings = settings
         self.sftp_client = sftp_client
         self._running = True
+        self._stable_files_queue: Queue[str] = Queue()
 
         self.file_monitor_repo: Optional[FileMonitorRepository] = None
         self.movie_service: Optional[MovieService] = None
@@ -39,6 +41,7 @@ class MonitorThread(QThread):
         Run the monitoring thread.
         
         Initializes services and starts file monitoring.
+        Processes stable files from the queue in a single thread to ensure thread safety.
         """
         try:
             # Initialize services with simplified path mapping
@@ -64,13 +67,29 @@ class MonitorThread(QThread):
                 file_exts=self.settings.file_extensions,
                 stability_duration=self.settings.stability_duration,
                 transfer_callback=self._on_transfer_completed,
+                stable_files_queue=self._stable_files_queue,
             )
 
             self.file_monitor_repo.create_directories()
             self.file_monitor_repo.start_monitoring()
 
+            # Main loop: process stable files from queue
             while self._running:
-                self.msleep(500)
+                try:
+                    # Check queue with timeout to allow checking _running flag
+                    file_path = self._stable_files_queue.get(timeout=0.5)
+                    
+                    # Process the stable file/folder on this thread (thread-safe SFTP access)
+                    if os.path.isdir(file_path):
+                        self.file_monitor_repo.handle_folder(file_path)
+                    else:
+                        self.file_monitor_repo.handle_file(file_path)
+                        
+                except Empty:
+                    # No items in queue, continue loop
+                    continue
+                except Exception as e:
+                    logger.error(f"MonitorThread: Error processing queued item: {e}")
 
             if self.file_monitor_repo:
                 self.file_monitor_repo.stop_monitoring()
