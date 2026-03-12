@@ -505,8 +505,9 @@ class MainWindow(QWidget):
     def showEvent(self, event: QShowEvent):
         """Called when window is shown."""
         super().showEvent(event)
-        # Don't auto-connect - user must manually connect or start monitoring
-        # This gives them control over when to connect to the selected server
+        # This handler itself does not force a connection; the user can connect
+        # or start monitoring manually, and auto-connect/auto-start may still
+        # occur elsewhere based on user settings.
 
     def closeEvent(self, event: QCloseEvent):
         """Called when user clicks the window's close button."""
