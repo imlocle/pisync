@@ -28,17 +28,17 @@ Welcome to the PiSync documentation directory. Here you'll find everything you n
 
 ## 📚 All Documentation Files
 
-| Document                                                 | Purpose                                                        | Audience         |
-| -------------------------------------------------------- | -------------------------------------------------------------- | ---------------- |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)**                   | System design, layers, data flows, threading model             | Developers       |
-| **[BUGS.md](BUGS.md)**                                   | Known issues, limitations, workarounds, performance baseline   | Everyone         |
-| **[DEPENDENCY_MANAGEMENT.md](DEPENDENCY_MANAGEMENT.md)** | Managing Python dependencies with pip-tools, update procedures | Developers       |
-| **[DEVELOPMENT.md](DEVELOPMENT.md)**                     | Setup, workflows, debugging, code standards                    | Developers       |
-| **[DISTRIBUTION.md](DISTRIBUTION.md)**                   | Building wheels, PyPI publishing, CI/CD pipeline               | Release managers |
-| **[INDEX.md](INDEX.md)**                                 | Comprehensive navigation hub with learning paths               | Everyone         |
-| **[PRODUCTION_STANDARDS.md](PRODUCTION_STANDARDS.md)**   | Production-grade practices, checklist, implementation guide    | Developers       |
-| **[QUICKSTART_PRODUCTION.md](QUICKSTART_PRODUCTION.md)** | Copy-paste templates for production setup phases               | Developers       |
-| **[ROADMAP.md](ROADMAP.md)**                             | Planned features, version timeline, community requests         | Everyone         |
+| Document                                                                                | Purpose                                                      | Audience         |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ---------------- |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)**                                                  | System design, layers, data flows, threading model           | Developers       |
+| **[BUGS.md](BUGS.md)**                                                                  | Known issues, limitations, workarounds, performance baseline | Everyone         |
+| **[DEVELOPMENT.md](DEVELOPMENT.md)**                                                    | Setup, workflows, debugging, code standards                  | Developers       |
+| **[INDEX.md](INDEX.md)**                                                                | Comprehensive navigation hub with learning paths             | Everyone         |
+| **[ROADMAP.md](ROADMAP.md)**                                                            | Planned features, version timeline, community requests       | Everyone         |
+| **[docs-internal/PRODUCTION_STANDARDS.md](../docs-internal/PRODUCTION_STANDARDS.md)**   | Production-grade practices, checklist _(Internal)_           | Developers       |
+| **[docs-internal/QUICKSTART_PRODUCTION.md](../docs-internal/QUICKSTART_PRODUCTION.md)** | Copy-paste templates _(Internal)_                            | Developers       |
+| **[docs-internal/DISTRIBUTION.md](../docs-internal/DISTRIBUTION.md)**                   | Building and packaging _(Internal)_                          | Release managers |
+| **[docs-internal/DEPENDENCY_MANAGEMENT.md](../docs-internal/DEPENDENCY_MANAGEMENT.md)** | Managing dependencies _(Internal)_                           | Developers       |
 
 ---
 
@@ -58,9 +58,9 @@ Welcome to the PiSync documentation directory. Here you'll find everything you n
 
 ### 🔧 DevOps / Release Managers
 
-1. Read [DISTRIBUTION.md](DISTRIBUTION.md) - How to build and release
-2. Read [DEPENDENCY_MANAGEMENT.md](DEPENDENCY_MANAGEMENT.md) - Manage dependencies
-3. Follow [PRODUCTION_STANDARDS.md](PRODUCTION_STANDARDS.md) - Production checklist
+1. Read [docs-internal/DISTRIBUTION.md](../docs-internal/DISTRIBUTION.md) - How to build and release
+2. Read [docs-internal/DEPENDENCY_MANAGEMENT.md](../docs-internal/DEPENDENCY_MANAGEMENT.md) - Manage dependencies
+3. Follow [docs-internal/PRODUCTION_STANDARDS.md](../docs-internal/PRODUCTION_STANDARDS.md) - Production checklist
 
 ---
 
@@ -90,21 +90,7 @@ DEVELOPMENT.md (Common Tasks)
 Ready to code!
 ```
 
-### Path 3: Production Setup (2-4 hours)
-
-```
-PRODUCTION_STANDARDS.md (Overview)
-  ↓
-QUICKSTART_PRODUCTION.md (Phase 1 templates)
-  ↓
-QUICKSTART_PRODUCTION.md (Phase 2 tests)
-  ↓
-QUICKSTART_PRODUCTION.md (Phase 3 CI/CD)
-  ↓
-Verified production-ready ✓
-```
-
-### Path 4: Bug Fixing (30 minutes)
+### Path 3: Bug Fixing (30 minutes)
 
 ```
 BUGS.md (Find your issue)
@@ -128,14 +114,11 @@ Fix, test, commit!
 **Q: What's the development workflow?**
 → Read [DEVELOPMENT.md](DEVELOPMENT.md#development-workflow)
 
-**Q: How do I run tests?**
-→ See [DEVELOPMENT.md](DEVELOPMENT.md#testing) (after setting up with PRODUCTION_STANDARDS.md)
-
 **Q: What features are planned?**
 → Check [ROADMAP.md](ROADMAP.md) for v1.1-v2.0 features
 
-**Q: How do I deploy PiSync?**
-→ Follow [DISTRIBUTION.md](DISTRIBUTION.md) for building and packaging
+**Q: How do I make my code production-ready?**
+→ See [docs-internal/PRODUCTION_STANDARDS.md](../docs-internal/PRODUCTION_STANDARDS.md) for the complete checklist
 
 **Q: Can I contribute?**
 → Yes! See [DEVELOPMENT.md](DEVELOPMENT.md) for setup and workflow
@@ -161,16 +144,18 @@ Fix, test, commit!
 
 ```
 docs/
-├── README.md                        ← You are here
-├── ARCHITECTURE.md                  (System design & layers)
-├── BUGS.md                          (Known issues & workarounds)
-├── DEPENDENCY_MANAGEMENT.md         (Dependency workflow)
-├── DEVELOPMENT.md                   (Developer setup & workflow)
-├── DISTRIBUTION.md                  (Build & packaging)
-├── INDEX.md                         (Comprehensive navigation hub)
-├── PRODUCTION_STANDARDS.md          (Production checklist)
-├── QUICKSTART_PRODUCTION.md         (Implementation templates)
-└── ROADMAP.md                       (Future features & timeline)
+├── README.md                        ← You are here (Public)
+├── ARCHITECTURE.md                  (System design & layers - Public)
+├── BUGS.md                          (Known issues & workarounds - Public)
+├── DEVELOPMENT.md                   (Developer setup & workflow - Public)
+├── INDEX.md                         (Comprehensive navigation hub - Public)
+├── ROADMAP.md                       (Future features & timeline - Public)
+│
+└── ../docs-internal/                ← Internal documentation
+    ├── PRODUCTION_STANDARDS.md      (Production checklist)
+    ├── QUICKSTART_PRODUCTION.md     (Implementation templates)
+    ├── DISTRIBUTION.md              (Build & packaging)
+    └── DEPENDENCY_MANAGEMENT.md     (Dependency workflow)
 ```
 
 ---

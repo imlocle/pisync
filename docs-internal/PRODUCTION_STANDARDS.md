@@ -175,7 +175,7 @@ pip install pisync-1.0.0-py3-none-any.whl
 4. Push git tag: `git tag -a v1.0.0 && git push origin v1.0.0`
 5. Automated GitHub Actions publishes to PyPI
 
-**Reference:** See `docs/DISTRIBUTION.md` for detailed publishing workflow and troubleshooting
+**Reference:** See `docs-internal/DISTRIBUTION.md` for detailed publishing workflow and troubleshooting
 
 ### 2.2 Testing & QA (HIGH PRIORITY)
 
@@ -426,7 +426,7 @@ jobs:
 ✅ requirements-dev.in (development dependencies)
 ✅ requirements.txt (locked production versions)
 ✅ requirements-dev.txt (locked development versions)
-✅ docs/DEPENDENCY_MANAGEMENT.md (maintenance guide)
+✅ docs-internal/DEPENDENCY_MANAGEMENT.md (maintenance guide)
 ```
 
 **Features:**
@@ -460,7 +460,7 @@ pip-compile requirements.in -o requirements.txt --upgrade
 # 3. Test and commit
 ```
 
-**Reference:** See `docs/DEPENDENCY_MANAGEMENT.md` for complete maintenance guide
+**Reference:** See `docs-internal/DEPENDENCY_MANAGEMENT.md` for complete maintenance guide
 
 ### 2.6 Release Management (MEDIUM PRIORITY)
 
@@ -693,13 +693,13 @@ class StructuredLogger:
 - `scripts/build_exe.sh` - Standalone executable builder
 - `scripts/setup_dev.sh` - Development setup
 - `.github/workflows/publish.yml` - CI/CD pipeline
-- `docs/DISTRIBUTION.md` - Publishing guide
+- `docs-internal/DISTRIBUTION.md` - Publishing guide
 - `Makefile` - Build commands
 - `requirements.in` - Top-level production dependencies
 - `requirements.txt` - Locked production versions (44 packages)
 - `requirements-dev.in` - Development and build dependencies
 - `requirements-dev.txt` - Locked development versions (70+ packages)
-- `docs/DEPENDENCY_MANAGEMENT.md` - Maintenance guide for updating dependencies
+- `docs-internal/DEPENDENCY_MANAGEMENT.md` - Maintenance guide for updating dependencies
 
 ### Phase 2: Code Quality & Testing (3-5 days)
 

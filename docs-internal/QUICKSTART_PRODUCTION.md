@@ -262,7 +262,7 @@ replace = __version__ = "{new_version}"
 search = version = "{current_version}"
 replace = version = "{new_version}"
 
-[bumpversion:file:docs/PRODUCTION_STANDARDS.md]
+[bumpversion:file:docs-internal/PRODUCTION_STANDARDS.md]
 search = > **Date:** March 12, 2026
 replace = > **Date Updated:** {now:%B %d, %Y}
 ```

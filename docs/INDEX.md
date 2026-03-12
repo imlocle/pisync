@@ -6,20 +6,20 @@ Welcome to PiSync Documentation! Here's how to navigate all available docs.
 
 ## 🎯 Quick Start by Task
 
-| **I want to...**                  | **Read this**                                            | **Time**  |
-| --------------------------------- | -------------------------------------------------------- | --------- |
-| Just install and use PiSync       | [README.md](../README.md) → Quick Start                  | 5 min     |
-| Understand how PiSync works       | [ARCHITECTURE.md](ARCHITECTURE.md)                       | 10 min    |
-| Set up my development environment | [DEVELOPMENT.md](DEVELOPMENT.md) → Getting Started       | 15 min    |
-| Understand the code structure     | [DEVELOPMENT.md](DEVELOPMENT.md) → Project Structure     | 10 min    |
-| Learn common development tasks    | [DEVELOPMENT.md](DEVELOPMENT.md) → Common Tasks          | 15 min    |
-| Build and distribute the app      | [DISTRIBUTION.md](DISTRIBUTION.md)                       | 30 min    |
-| Manage and update dependencies    | [DEPENDENCY_MANAGEMENT.md](DEPENDENCY_MANAGEMENT.md)     | 15 min    |
-| Make my code production-ready     | [PRODUCTION_STANDARDS.md](PRODUCTION_STANDARDS.md)       | 30 min    |
-| Get production setup templates    | [QUICKSTART_PRODUCTION.md](QUICKSTART_PRODUCTION.md)     | 2-4 hours |
-| See known bugs and limitations    | [BUGS.md](BUGS.md)                                       | 10 min    |
-| Check future feature ideas        | [ROADMAP.md](ROADMAP.md)                                 | 15 min    |
-| Troubleshoot an issue             | [BUGS.md](BUGS.md) then [DEVELOPMENT.md](DEVELOPMENT.md) | varies    |
+| **I want to...**                  | **Read this**                                                                       | **Time**  |
+| --------------------------------- | ----------------------------------------------------------------------------------- | --------- |
+| Just install and use PiSync       | [README.md](../README.md) → Quick Start                                             | 5 min     |
+| Understand how PiSync works       | [ARCHITECTURE.md](ARCHITECTURE.md)                                                  | 10 min    |
+| Set up my development environment | [DEVELOPMENT.md](DEVELOPMENT.md) → Getting Started                                  | 15 min    |
+| Understand the code structure     | [DEVELOPMENT.md](DEVELOPMENT.md) → Project Structure                                | 10 min    |
+| Learn common development tasks    | [DEVELOPMENT.md](DEVELOPMENT.md) → Common Tasks                                     | 15 min    |
+| See known bugs and limitations    | [BUGS.md](BUGS.md)                                                                  | 10 min    |
+| Check future feature ideas        | [ROADMAP.md](ROADMAP.md)                                                            | 15 min    |
+| Troubleshoot an issue             | [BUGS.md](BUGS.md) then [DEVELOPMENT.md](DEVELOPMENT.md)                            | varies    |
+| Build and distribute the app      | [docs-internal/DISTRIBUTION.md](../docs-internal/DISTRIBUTION.md)                   | 30 min    |
+| Manage and update dependencies    | [docs-internal/DEPENDENCY_MANAGEMENT.md](../docs-internal/DEPENDENCY_MANAGEMENT.md) | 15 min    |
+| Make my code production-ready     | [docs-internal/PRODUCTION_STANDARDS.md](../docs-internal/PRODUCTION_STANDARDS.md)   | 30 min    |
+| Get production setup templates    | [docs-internal/QUICKSTART_PRODUCTION.md](../docs-internal/QUICKSTART_PRODUCTION.md) | 2-4 hours |
 
 ---
 
@@ -36,16 +36,16 @@ Welcome to PiSync Documentation! Here's how to navigate all available docs.
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Setup, workflows, debugging, code standards
 - **[BUGS.md](BUGS.md)** - Known issues, limitations, workarounds, ranked by severity
 
-### For Packaging & Distribution
+### For Developers
 
-- **[DISTRIBUTION.md](DISTRIBUTION.md)** - Building wheels, source distributions, standalone executables, publishing to PyPI
-- **[DEPENDENCY_MANAGEMENT.md](DEPENDENCY_MANAGEMENT.md)** - Managing dependencies with pip-tools, updating packages, lock file workflow
-
-### For Production
-
-- **[PRODUCTION_STANDARDS.md](PRODUCTION_STANDARDS.md)** - Complete guide to production-grade practices (Packaging, Testing, Code Quality, CI/CD, etc.)
-- **[QUICKSTART_PRODUCTION.md](QUICKSTART_PRODUCTION.md)** - Copy-paste templates to get started on each production phase
 - **[INDEX.md](INDEX.md)** - This file
+
+### For Packaging & Distribution (Internal)
+
+- **[docs-internal/DISTRIBUTION.md](../docs-internal/DISTRIBUTION.md)** - Building wheels, source distributions, standalone executables, publishing to PyPI
+- **[docs-internal/DEPENDENCY_MANAGEMENT.md](../docs-internal/DEPENDENCY_MANAGEMENT.md)** - Managing dependencies with pip-tools, updating packages, lock file workflow
+- **[docs-internal/PRODUCTION_STANDARDS.md](../docs-internal/PRODUCTION_STANDARDS.md)** - Complete guide to production-grade practices (Packaging, Testing, Code Quality, CI/CD, etc.)
+- **[docs-internal/QUICKSTART_PRODUCTION.md](../docs-internal/QUICKSTART_PRODUCTION.md)** - Copy-paste templates to get started on each production phase
 
 ---
 
@@ -72,9 +72,9 @@ Welcome to PiSync Documentation! Here's how to navigate all available docs.
 
 **Want to modernize the codebase?**
 
-1. Read [PRODUCTION_STANDARDS.md](PRODUCTION_STANDARDS.md) - See what's needed
-2. Follow [QUICKSTART_PRODUCTION.md](QUICKSTART_PRODUCTION.md) - Implement in phases
-3. Reference README.md for user context
+1. Read [docs-internal/PRODUCTION_STANDARDS.md](../docs-internal/PRODUCTION_STANDARDS.md) - See what's needed
+2. Follow [docs-internal/QUICKSTART_PRODUCTION.md](../docs-internal/QUICKSTART_PRODUCTION.md) - Implement in phases
+3. Reference [docs-internal/DISTRIBUTION.md](../docs-internal/DISTRIBUTION.md) for publishing
 
 ---
 
@@ -129,21 +129,7 @@ DEVELOPMENT.md (Common Tasks)
 Ready to code!
 ```
 
-### Path 3: Production Readiness (2-4 hours)
-
-```
-PRODUCTION_STANDARDS.md (Read overview)
-  ↓
-QUICKSTART_PRODUCTION.md (Phase 1 - Copy templates)
-  ↓
-QUICKSTART_PRODUCTION.md (Phase 2 - Write tests)
-  ↓
-QUICKSTART_PRODUCTION.md (Phase 3 - Setup CI/CD)
-  ↓
-Verify checklist and commit!
-```
-
-### Path 4: Bug Fixing (30 minutes)
+### Path 3: Bug Fixing (30 minutes)
 
 ```
 BUGS.md (Find your bug)
@@ -195,11 +181,11 @@ Fix and test!
 
 ### Q: How do I run tests?
 
-**A:** See [DEVELOPMENT.md](DEVELOPMENT.md) → Testing section. After implementing [QUICKSTART_PRODUCTION.md](QUICKSTART_PRODUCTION.md), use `make test`.
+**A:** See [DEVELOPMENT.md](DEVELOPMENT.md) → Testing section. After implementing [docs-internal/QUICKSTART_PRODUCTION.md](../docs-internal/QUICKSTART_PRODUCTION.md), use `make test`.
 
 ### Q: Can I use on Windows/Linux?
 
-**A:** Currently macOS only. See [PRODUCTION_STANDARDS.md](PRODUCTION_STANDARDS.md#3-Cross-Platform-Support-LOW-PRIORITY) for cross-platform roadmap.
+**A:** Currently macOS only. See [ROADMAP.md](ROADMAP.md) for cross-platform support roadmap.
 
 ---
 
