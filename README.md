@@ -123,7 +123,7 @@ ssh pi@YOUR_PI_IP
 | **[DISTRIBUTION.md](docs/DISTRIBUTION.md)**                   | Packaging, PyPI publishing, CI/CD  | Release management             |
 | **[DEPENDENCY_MANAGEMENT.md](docs/DEPENDENCY_MANAGEMENT.md)** | Managing dependencies, updates     | Dependency maintenance         |
 | **[BUGS.md](docs/BUGS.md)**                                   | Known issues, limitations          | Troubleshooting                |
-| **[IDEAS.md](docs/IDEAS.md)**                                 | Roadmap, future features           | Project planning               |
+| **[ROADMAP.md](docs/ROADMAP.md)**                             | Roadmap, future features           | Project planning               |
 
 ## 📁 Directory Structure
 
@@ -300,7 +300,7 @@ ssh -v pi@YOUR_PI_IP  # (for detailed debugging)
 - Plugin system for extensibility
 - REST API for remote control
 
-See [ideas.md](docs/ideas.md) for detailed feature requests and design discussions.
+See [ROADMAP.md](docs/ROADMAP.md) for detailed feature requests and design discussions.
 
 ## 🤝 Contributing
 

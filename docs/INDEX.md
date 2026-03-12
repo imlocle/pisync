@@ -238,7 +238,7 @@ Fix and test!
 | [README.md](README.md)                               | Mar 11, 2026 | ✅ Complete     | Core     |
 | [ARCHITECTURE.md](ARCHITECTURE.md)                   | Mar 11, 2026 | ✅ Complete     | Core     |
 | [DEVELOPMENT.md](DEVELOPMENT.md)                     | Mar 11, 2026 | ✅ Complete     | Core     |
-| [bugs.md](bugs.md)                                   | Mar 12, 2026 | ✅ Complete     | Core     |
+| [BUGS.md](BUGS.md)                                   | Mar 12, 2026 | ✅ Complete     | Core     |
 | [ideas.md](ideas.md)                                 | Original     | ⚠️ Needs Review | Medium   |
 | [PRODUCTION_STANDARDS.md](PRODUCTION_STANDARDS.md)   | Mar 12, 2026 | ✅ Complete     | High     |
 | [QUICKSTART_PRODUCTION.md](QUICKSTART_PRODUCTION.md) | Mar 12, 2026 | ✅ Complete     | High     |

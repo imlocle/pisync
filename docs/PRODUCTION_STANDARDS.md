@@ -472,7 +472,7 @@ pip-compile requirements.in -o requirements.txt --upgrade
 # main.py
 app.setApplicationVersion("1.0.0")
 
-# docs/bugs.md
+# docs/BUGS.md
 > **Version:** 1.0.0
 ```
 

@@ -127,8 +127,8 @@ pisync/
 │   ├── README.md                    # Getting started guide
 │   ├── ARCHITECTURE.md              # Detailed architecture
 │   ├── DEVELOPMENT.md               # This file
-│   ├── bugs.md                      # Known issues & fixes
-│   └── ideas.md                     # Future enhancements
+│   ├── BUGS.md                      # Known issues & fixes
+│   └── ROADMAP.md                   # Future enhancements
 │
 └── .venv/                           # Virtual environment (git-ignored)
 ```
@@ -174,7 +174,7 @@ git commit -m "feat: add transfer status indicator"
 
 ### 2. Bug Fixes
 
-Check [bugs.md](./bugs.md) for known issues and recent fixes.
+Check [BUGS.md](./BUGS.md) for known issues and recent fixes.
 
 ```bash
 # Create fix branch
@@ -617,7 +617,7 @@ Update version in:
 ## Additional Resources
 
 - [Architecture](./ARCHITECTURE.md) - Detailed system design
-- [Known Issues](./bugs.md) - Bug tracking & fixes
-- [Future Ideas](./ideas.md) - Roadmap & enhancements
+- [Known Issues](./BUGS.md) - Bug tracking & fixes
+- [Future Ideas](./ROADMAP.md) - Roadmap & enhancements
 - [PySide6 Docs](https://doc.qt.io/qtforpython-6/) - Qt framework
 - [Paramiko Docs](https://www.paramiko.org/) - SSH/SFTP library
