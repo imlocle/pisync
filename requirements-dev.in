@@ -1,0 +1,23 @@
+# Development dependencies
+-r requirements.in
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-qt>=4.2.0
+
+# Code quality
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+pylint>=2.17.0
+mypy>=1.0.0
+
+# Build & distribution
+build>=1.0.0
+twine>=4.0.0
+wheel>=0.40.0
+pip-tools>=7.0.0
+
+# PyInstaller for standalone builds
+pyinstaller>=6.0.0

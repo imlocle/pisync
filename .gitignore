@@ -94,6 +94,16 @@ ipython_config.py
 #   install all needed dependencies.
 #Pipfile.lock
 
+# pip-tools
+#   For reproducibility, requirements*.txt lock files ARE committed to version control.
+#   requirements.in files define constraints, requirements.txt files are auto-generated.
+#   See docs/DEPENDENCY_MANAGEMENT.md for usage.
+# Do NOT ignore:
+#   - requirements.in (source of truth)
+#   - requirements-dev.in (development dependencies)
+#   - requirements.txt (locked production versions)
+#   - requirements-dev.txt (locked development versions)
+
 # UV
 #   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
