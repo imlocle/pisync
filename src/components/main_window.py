@@ -28,7 +28,7 @@ from src.widgets.file_explorer_widget import FileExplorerWidget
 class MainWindow(QWidget):
     """
     Modern, clean main window for PiSync.
-    
+
     Features:
     - Clean toolbar with icon + text buttons
     - Status bar with connection and monitoring status
@@ -36,7 +36,7 @@ class MainWindow(QWidget):
     - Activity log with timestamps
     - Progress indicator
     """
-    
+
     fully_loaded = Signal()  # Emitted when window is fully initialized
 
     def __init__(self) -> None:
@@ -50,40 +50,38 @@ class MainWindow(QWidget):
 
         # === 1. Load Settings ===
         self.settings = Settings()
-        
+
         # Check if we need to show server selection / perform initial server setup
         self._should_show_server_selection()
 
         # Validate settings for backward compatibility and required fields
         if not self._validate_settings():
             return
-        
+
         # Create controller
         self.connection_manager_service = ConnectionManagerService(self.settings)
-        self.controller = MainWindowController(
-            self, self.connection_manager_service
-        )
+        self.controller = MainWindowController(self, self.connection_manager_service)
 
         # === 2. Build Layout ===
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-        
+
         self._setup_toolbar(main_layout)
         self._setup_status_bar(main_layout)
         self._setup_content_area(main_layout)
         self._setup_activity_log(main_layout)
         self._setup_progress_bar(main_layout)
-        
+
         self.setLayout(main_layout)
 
         # === 3. Wire Signals ===
         self._setup_connections()
-        
+
         # === 4. Connect logger ===
         logger.log_signal.connect(self.log)
         logger.progress_signal.connect(self.update_progress)
-        
+
         # === 5. Signal that window is ready (after a short delay to allow UI to settle) ===
         QTimer.singleShot(100, self._emit_fully_loaded)
 
@@ -93,44 +91,44 @@ class MainWindow(QWidget):
     def _emit_fully_loaded(self):
         """Emit signal that window is fully loaded and ready."""
         self.fully_loaded.emit()
-        
+
         # Auto-connect after window is loaded
         QTimer.singleShot(200, self._auto_connect_and_start)
-    
+
     def _auto_connect_and_start(self):
         """Automatically connect and start monitoring after window loads (if enabled in settings)."""
         # Only auto-connect if auto_start_monitor is enabled
         if not self.settings.auto_start_monitor:
             logger.info("Auto-connect disabled in settings")
             return
-        
+
         # Connect to the server
         self.controller.connect()
-        
+
         # Start monitoring after successful connection
         if self.connection_manager_service.is_connected():
             self.controller.start_monitor()
-    
+
     def _should_show_server_selection(self) -> bool:
         """
         Check if we should show server selection dialog.
-        
+
         Returns:
             True if server selection should be shown
         """
         servers = self.settings.get_servers()
-        
+
         # If no servers configured, show settings to add first server
         if not servers:
             return self._show_initial_setup()
-        
+
         # If servers exist, show selection dialog
         return self._show_server_selection()
-    
+
     def _show_initial_setup(self) -> bool:
         """
         Show initial setup for new users.
-        
+
         Returns:
             True if setup completed, False if cancelled
         """
@@ -140,7 +138,7 @@ class MainWindow(QWidget):
             "Welcome! Let's set up your first Raspberry Pi server.",
             QMessageBox.StandardButton.Ok,
         )
-        
+
         settings_window = SettingsWindow(self.settings, server_mode=True)
         if settings_window.exec() != QDialog.DialogCode.Accepted:
             QMessageBox.critical(
@@ -151,29 +149,29 @@ class MainWindow(QWidget):
             )
             self.close()
             return False
-        
+
         # After adding first server, show selection
         return self._show_server_selection()
-    
+
     def _show_server_selection(self) -> bool:
         """
         Show server selection dialog.
-        
+
         Returns:
             True if server selected, False if cancelled
         """
         from src.components.server_selection_dialog import ServerSelectionDialog
-        
+
         selection_dialog = ServerSelectionDialog(self)
         if selection_dialog.exec() != QDialog.DialogCode.Accepted:
             self.close()
             return False
-        
+
         server_id = selection_dialog.get_selected_server_id()
         if not server_id:
             self.close()
             return False
-        
+
         # Load the selected server
         if not self.settings.load_server(server_id):
             QMessageBox.critical(
@@ -184,9 +182,9 @@ class MainWindow(QWidget):
             )
             self.close()
             return False
-        
+
         return True
-    
+
     def _validate_settings(self) -> bool:
         """Validate settings for backward compatibility with old configs."""
         if not self.settings.is_valid():
@@ -212,23 +210,25 @@ class MainWindow(QWidget):
                 return False
 
         return True
-    
+
     def handle_connection_failure(self):
         """Handle connection failure with retry logic."""
         self.connection_attempts += 1
-        
+
         if self.connection_attempts >= self.max_connection_attempts:
-            logger.error(f"Connection failed after {self.max_connection_attempts} attempts")
-            
+            logger.error(
+                f"Connection failed after {self.max_connection_attempts} attempts"
+            )
+
             reply = QMessageBox.question(
                 self,
                 "Connection Failed",
                 f"Failed to connect after {self.max_connection_attempts} attempts.\n\n"
                 "Would you like to select a different server?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
+                QMessageBox.StandardButton.Yes,
             )
-            
+
             if reply == QMessageBox.StandardButton.Yes:
                 # Reset attempts and show server selection
                 self.connection_attempts = 0
@@ -239,26 +239,28 @@ class MainWindow(QWidget):
                 # User chose not to select different server
                 logger.info("User cancelled server selection")
         else:
-            logger.warn(f"Connection attempt {self.connection_attempts}/{self.max_connection_attempts} failed")
-    
+            logger.warn(
+                f"Connection attempt {self.connection_attempts}/{self.max_connection_attempts} failed"
+            )
+
     def change_server(self):
         """Allow user to change to a different server."""
         # Stop monitoring if active
         if self.controller.auto_sync.is_monitoring():
             self.controller.stop_monitor()
-        
+
         # Disconnect current connection
         self.connection_manager_service.disconnect()
-        
+
         # Reset connection attempts
         self.connection_attempts = 0
-        
+
         # Show server selection
         if self._show_server_selection():
             # Update connection manager with new settings
             self.connection_manager_service = ConnectionManagerService(self.settings)
             self.controller.connection_manager = self.connection_manager_service
-            
+
             # Connect to new server
             self.controller.connect()
 
@@ -301,14 +303,16 @@ class MainWindow(QWidget):
         """Create modern toolbar with icon + text buttons."""
         toolbar = QFrame()
         toolbar.setObjectName("toolbar")
-        toolbar.setStyleSheet("""
+        toolbar.setStyleSheet(
+            """
             QFrame#toolbar {
                 background-color: #252526;
                 border-bottom: 1px solid #3e3e42;
                 padding: 8px;
             }
-        """)
-        
+        """
+        )
+
         toolbar_layout = QHBoxLayout(toolbar)
         toolbar_layout.setContentsMargins(12, 8, 12, 8)
         toolbar_layout.setSpacing(8)
@@ -348,7 +352,7 @@ class MainWindow(QWidget):
         self.change_server_btn.setMinimumHeight(36)
         self.change_server_btn.setToolTip("Select a different server")
         self.change_server_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        
+
         self.refresh_btn = QPushButton("↻")
         self.refresh_btn.setObjectName("icon_btn")
         self.refresh_btn.setToolTip("Refresh Explorers")
@@ -376,14 +380,24 @@ class MainWindow(QWidget):
         """Create status bar with connection and monitoring status."""
         status_bar = QFrame()
         status_bar.setObjectName("status_bar")
-        status_bar.setStyleSheet("""
+        status_bar.setStyleSheet(
+            """
             QFrame#status_bar {
                 background-color: #252526;
                 border-bottom: 1px solid #3e3e42;
                 padding: 6px 12px;
             }
-        """)
-        
+            QLabel#connection_disconnected {
+                color: #858585;
+                font-weight: 500;
+            }
+            QLabel#connection_connected {
+                color: #4ec9b0;
+                font-weight: 500;
+            }
+        """
+        )
+
         status_layout = QHBoxLayout(status_bar)
         status_layout.setContentsMargins(12, 6, 12, 6)
         status_layout.setSpacing(16)
@@ -391,7 +405,6 @@ class MainWindow(QWidget):
         # Connection status
         self.connection_status_label = QLabel("● Disconnected")
         self.connection_status_label.setObjectName("connection_disconnected")
-        self.connection_status_label.setStyleSheet("font-weight: 500;")
 
         # Monitoring status
         self.status_label = QLabel("⏸ Monitoring: Idle")
@@ -408,7 +421,7 @@ class MainWindow(QWidget):
         content_container = QWidget()
         content_layout = QVBoxLayout(content_container)
         content_layout.setContentsMargins(12, 12, 12, 12)
-        
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(2)
 
@@ -430,7 +443,7 @@ class MainWindow(QWidget):
         splitter.addWidget(self.pi_explorer)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 1)
-        
+
         content_layout.addWidget(splitter)
         layout.addWidget(content_container, stretch=1)
 
@@ -450,7 +463,8 @@ class MainWindow(QWidget):
         self.log_box = QTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setMaximumHeight(180)
-        self.log_box.setStyleSheet("""
+        self.log_box.setStyleSheet(
+            """
             QTextEdit {
                 background-color: #1e1e1e;
                 border: 1px solid #3e3e42;
@@ -459,7 +473,8 @@ class MainWindow(QWidget):
                 font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
                 font-size: 12px;
             }
-        """)
+        """
+        )
         log_layout.addWidget(self.log_box)
 
         layout.addWidget(log_container)
@@ -469,14 +484,14 @@ class MainWindow(QWidget):
         progress_container = QWidget()
         progress_layout = QVBoxLayout(progress_container)
         progress_layout.setContentsMargins(12, 0, 12, 12)
-        
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("")
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setMinimumHeight(28)
-        
+
         progress_layout.addWidget(self.progress_bar)
         layout.addWidget(progress_container)
 
@@ -530,10 +545,9 @@ class MainWindow(QWidget):
     def _handle_pi_drop(self, local_paths: list[str], remote_dir: str) -> None:
         """
         Called when user drags files/folders from Finder onto the Pi explorer.
-        
+
         Delegates to ManualTransferController for handling.
         """
         self.controller.manual_transfer.transfer_to_pi(
-            local_paths=local_paths,
-            remote_destination=remote_dir
+            local_paths=local_paths, remote_destination=remote_dir
         )
