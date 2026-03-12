@@ -396,8 +396,8 @@ else:
    - Verify SSH key permissions: `chmod 600 ~/.ssh/id_rsa`
 
 2. **File Monitoring Test**:
-   - Create `~/Transfers/Movies/TestMovie/`
-   - Add `.mp4` file
+   - Create `~/Transfers/Movies/TestMovie (2024)/`
+   - Add `.mp4` file (e.g., `TestMovie (2024).mp4`)
    - Verify it transfers and deletes (if enabled)
 
 3. **Manual Transfer Test**:

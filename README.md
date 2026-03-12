@@ -127,25 +127,25 @@ ssh pi@YOUR_PI_IP
 
 ## 📁 Directory Structure
 
-PiSync expects a specific directory structure on your local machine:
+PiSync expects a specific directory structure on your local machine (organized like [Jellyfin](https://jellyfin.org/)):
 
 ```
 ~/Transfers/
 ├── Movies/
-│   ├── Avatar/
-│   │   ├── Avatar.mp4
-│   │   └── Avatar.srt
-│   └── Inception/
-│       ├── Inception.mkv
-│       └── Inception.srt
+│   ├── Avatar (2009)/
+│   │   ├── Avatar (2009).mp4
+│   │   └── Avatar (2009).srt
+│   └── Inception (2010)/
+│       ├── Inception (2010).mkv
+│       └── Inception (2010).srt
 └── TV_shows/
-    ├── Breaking Bad/
+    ├── Breaking Bad (2008)/
     │   ├── Season 1/
     │   │   ├── S01E01.mp4
     │   │   └── S01E02.mp4
     │   └── Season 2/
     │       └── S02E01.mp4
-    └── The Office/
+    └── The Office (2005)/
         └── Season 1/
             └── S01E01.mp4
 ```
