@@ -1,11 +1,18 @@
 # PiSync Architecture
 
-> **Last Updated:** March 10, 2026  
+> **Last Updated:** March 11, 2026  
 > **Version:** 1.0.0
 
 ## Overview
 
-PiSync is built with a clean layered architecture that separates concerns and enables testability.
+PiSync is built with a **clean layered architecture** that enables testability, maintainability, and extensibility. The design follows domain-driven design (DDD) principles with clear separation between:
+
+- **Presentation Layer**: User interface (PySide6 widgets)
+- **Application Layer**: Business logic and orchestration (controllers)
+- **Domain Layer**: Pure business rules and protocols (models, interfaces)
+- **Infrastructure Layer**: External systems (SFTP, filesystem, SSH)
+
+This architecture makes it easy to mock dependencies, test business logic in isolation, and swap implementations (e.g., supporting Windows/Linux by changing the filesystem layer).
 
 ## Architecture Layers
 

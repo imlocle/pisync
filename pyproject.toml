@@ -70,8 +70,9 @@ pisync = "main:main"
 [project.urls]
 Homepage = "https://github.com/imlocle/pisync"
 Repository = "https://github.com/imlocle/pisync.git"
-Documentation = "https://github.com/imlocle/pisync/wiki"
-Issues = "https://github.com/imlocle/pisync/issues"
+Documentation = "https://github.com/imlocle/pisync/tree/main/docs"
+"Documentation Index" = "https://github.com/imlocle/pisync/blob/main/docs/INDEX.md"
+"Bug Reports" = "https://github.com/imlocle/pisync/issues"
 
 [tool.setuptools]
 packages = ["src"]

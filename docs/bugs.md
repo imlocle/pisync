@@ -1,131 +1,120 @@
 # Known Issues & Bug Tracking
 
-> **Last Updated:** March 10, 2026  
+> **Last Updated:** March 11, 2026  
 > **Version:** 1.0.0
 
 ## 🐛 Active Bugs
 
-Currently no critical bugs. Minor issues and enhancements tracked below.
+Currently no critical bugs reported. See potential issues and limitations below.
 
-## ✅ Recently Fixed (March 2026)
+## 🔍 Potential Issues (Ranked by Severity)
 
-### Singleton Settings Mutation During Connection Test (CRITICAL)
+### CRITICAL - Risk of data loss or crashes
 
-**Issue**: In server_mode, `test_connection()` created `temp_settings = Settings()` (getting the singleton) and then overwrote `temp_settings.config`. Since Settings is a singleton, this mutated the global application settings just to test connectivity, which could leak into the running app/session and corrupt configuration.
+1. **SFTP File Handle Leak on Transfer Failure** (HIGH IMPACT)
+   - **Location**: [src/services/base_transfer_service.py](src/services/base_transfer_service.py#L195), [src/controllers/transfer_worker.py](src/controllers/transfer_worker.py#L155)
+   - **Issue**: On transfer failure, partial remote files are not always cleaned up. If `sftp.put()` fails after creating the file, the incomplete file remains with no mechanism to remove it on retry.
+   - **Symptom**: Remote storage gradually fills with incomplete/corrupted files after failed transfers
+   - **Scenario**: Large file transfer interrupted mid-way, exception caught, retry happens but orphan file persists
+   - **Fix Required**: Wrap `sftp.put()` in try-finally block to remove incomplete files on exception
 
-**Fix**: Created a lightweight `TempSettings` class that wraps SettingsConfig without touching the singleton. The test connection is now side-effect free and doesn't mutate global state.
+2. **Race Condition on Startup - Auto-connect Before Server Selection** (HIGH IMPACT)
+   - **Location**: [src/components/main_window.py](src/components/main_window.py#L93-L103)
+   - **Issue**: `_auto_connect_and_start()` called via QTimer with 200ms delay, but happens immediately after window show. If user hasn't selected a server yet, it may connect with stale/default credentials
+   - **Symptom**: Connecting to wrong Pi if user has multiple servers configured
+   - **Scenario**: First run with multi-server setup, initial server connection fails silently, user not aware wrong Pi is connected
+   - **Fix Required**: Only call auto-connect AFTER server selection is confirmed, add server-changed signal check
 
-**Files Changed**: `src/components/settings_window.py`
+3. **File Retry Loop May Bypass Stability Check** (MEDIUM-HIGH IMPACT)
+   - **Location**: [src/repositories/file_monitor_repository.py](src/repositories/file_monitor_repository.py#L536)
+   - **Issue**: On transfer failure, file is re-enqueued but stability tracker may still hold stale size data. If file is modified mid-retry, stability timestamp is not reset, could result in transferring unstable file
+   - **Symptom**: Partially written files transferred if they fail and are retried quickly
+   - **Scenario**: Large file fails to transfer at 50%, gets retried, but stability tracker thinks file is stable because previous timestamp still active
+   - **Fix Required**: Clear file from stability tracker before re-enqueuing on retry in `handle_file()` error path
 
-### Auto-Connect Ignoring Settings
+4. **SFTP Connection Not Verified Before Worker Thread Starts** (HIGH IMPACT)
+   - **Location**: [src/controllers/transfer_controller.py](src/controllers/transfer_controller.py#L56-L90)
+   - **Issue**: `open_sftp_session()` called to create worker SFTP, but if connection dies between check and thread start, worker will fail with cryptic error
+   - **Symptom**: Transfer starts then immediately fails with "Socket is closed" before any progress
+   - **Scenario**: User connects, waits 30 seconds before starting drag-drop transfer, connection times out, transfer fails non-intuitively
+   - **Fix Required**: Add SFTP connection verify immediately before thread.start(), emit user-friendly error if connection drops
 
-**Issue**: MainWindow scheduled `_auto_connect_and_start()` on load, which always called `connect()` and `start_monitor()` regardless of the `auto_start_monitor` setting. This conflicted with the intended behavior (default: False) and ignored user preferences. Additionally, there were inconsistent defaults: field default was False, but `from_json()` and settings UI used True as fallback.
+### HIGH - Important functionality broken
 
-**Fix**:
+5. **Settings Port Input Validation Inconsistency** (HIGH IMPACT)
+   - **Location**: [src/components/settings_window.py](src/components/settings_window.py#L651-L675)
+   - **Issue**: Port input validation in `test_connection()` fails silently without user feedback. If port is non-numeric AND settings dialog is closed, saved config has invalid port value
+   - **Symptom**: User enters invalid port like "22a", clicks test (fails silently), then saves settings - port value corrupts config
+   - **Scenario**: User types wrong port, dialog rejects test, but save still stores corrupted value
+   - **Fix Required**: Validate port format in `save_settings()` before persisting, show error for non-numeric input
 
-- Made `_auto_connect_and_start()` conditional on `settings.auto_start_monitor`
-- Fixed inconsistent defaults to all use False
-- Updated `from_json()` fallback from True to False
-- Updated settings window checkbox fallback from True to False
+6. **Incomplete Error Recovery in File Monitor Loop** (HIGH IMPACT)
+   - **Location**: [src/controllers/monitor_thread.py](src/controllers/monitor_thread.py#L86)
+   - **Issue**: Exception in `handle_file()` or `handle_folder()` is caught broadly with `logger.error()` but processing continues. If transfer service loses SFTP connection, error is logged but loop keeps pulling from queue without reconnecting
+   - **Symptom**: After SFTP connection drops during monitoring, all subsequent transfers fail silently
+   - **Scenario**: Network interruption occurs mid-transfer during monitoring, connection lost, but queue keeps processing with dead SFTP
+   - **Fix Required**: Propagate ConnectionLostError to stop_monitoring(), auto-reconnect or emit signal to main thread
 
-**Files Changed**: `src/components/main_window.py`, `src/config/settings.py`, `src/components/settings_window.py`
+7. **File Already Processed Lock Gap** (HIGH IMPACT)
+   - **Location**: [src/repositories/file_monitor_repository.py](src/repositories/file_monitor_repository.py#L359-L380)
+   - **Issue**: Race condition: file can be scheduled twice if `_schedule_file_processing()` called twice from watchdog events before `_mark_as_processed()` is called. Lock is only held during check, not during subsequent operations
+   - **Symptom**: Files transferred twice in rare cases
+   - **Scenario**: Rapid file modifications trigger on_created and on_modified in quick succession, both pass the lock check before either marks as processed
+   - **Fix Required**: Extend lock to cover entire scheduling operation, not just the check
 
-### Server Change Monitoring Check
+### MEDIUM - Degraded functionality
 
-**Issue**: `change_server()` checked for `self.controller.monitor_thread`, but MainWindowController doesn't expose `monitor_thread` (it's internal to AutoSyncController). This meant monitoring could keep running while switching servers, potentially causing transfers to the wrong server or connection errors.
+8. **Signal Disconnection on Application Close May Leak Memory** (MEDIUM IMPACT)
+   - **Location**: [src/components/main_window.py](src/components/main_window.py#L513-L523)
+   - **Issue**: Signals are connected in `_setup_connections()` but never explicitly disconnected. When window closes, if shutdown() is slow, signals may still fire on dangling objects
+   - **Symptom**: Occasional crashes on exit if transfer completes during shutdown
+   - **Scenario**: User closes app while transfer in progress, transfer finishes, signal fires on deleted UI object
+   - **Fix Required**: Disconnect all signals in `closeEvent()` before shutdown, or use context managers
 
-**Fix**: Updated to use the correct API: `self.controller.auto_sync.is_monitoring()` to properly check if monitoring is active before stopping it.
+9. **Empty Queue Timeout May Block Shutdown** (MEDIUM IMPACT)
+   - **Location**: [src/controllers/monitor_thread.py](src/controllers/monitor_thread.py#L86)
+   - **Issue**: `self._stable_files_queue.get(timeout=0.5)` in tight loop. If queue backs up with 1000s of files, getting each item takes O(n) time, shutdown can hang
+   - **Symptom**: App takes 30+ seconds to shutdown if large backlog of queued files
+   - **Scenario**: Add 1000 files to watch directory quickly, then close app immediately
+   - **Fix Required**: Implement queue drain on stop signal, or use priority queue with size bounds
 
-**Files Changed**: `src/components/main_window.py`
+10. **Configuration Migration Silent Failures** (MEDIUM IMPACT)
 
-### Multiple Polling Thread Prevention
+- **Location**: [src/config/settings.py](src/config/settings.py#L260-L268)
+- **Issue**: If config file is corrupted JSON, `_load_config()` catches exception and returns empty dict. This silently loses user configuration instead of prompting recovery
+- **Symptom**: User configuration disappears, app reverts to defaults without warning
+- **Scenario**: Config file partially written during save crash, becomes invalid JSON, next startup silently loses all settings
+- **Fix Required**: Create config backup on load failure, show recovery dialog to user
 
-**Issue**: `start_polling()` could be called multiple times without checking if a polling thread was already running. This would spawn multiple daemon threads, causing duplicate file processing, race conditions, and wasted resources. Similarly, `start_monitoring()` could start multiple Observer threads.
+11. **Path Expansion Race in Settings Validator** (MEDIUM IMPACT)
+    - **Location**: [src/config/settings.py](src/config/settings.py#L106-L115)
+    - **Issue**: `validate_watch_dir` creates directory if missing with `os.makedirs()`. But Pydantic validators run during model creation, not during save, so directory created immediately even if user cancels dialog
+    - **Symptom**: Empty watch directories created in user's home directory even if user doesn't finalize settings
+    - **Scenario**: User opens settings, changes watch dir, changes mind, clicks Cancel - directory was already created
+    - **Fix Required**: Move directory creation to `save_settings()` instead of validator, validators should only validate
 
-**Fix**: Added guards to both methods:
+### LOW - Minor issues
 
-- `start_polling()`: Checks if thread is alive, stops existing thread before starting new one
-- `start_monitoring()`: Checks if Observer is alive, skips start if already running
+12. **Remote Explorer Error Doesn't Update UI State** (LOW IMPACT)
+    - **Location**: [src/widgets/file_explorer_widget.py](src/widgets/file_explorer_widget.py#L217-L228)
+    - **Issue**: When remote explorer fails and emits error, UI path label may show outdated path. While `_reset_remote_state_after_failure()` resets current_path, the title_label text was already displayed
+    - **Symptom**: UI shows wrong path after connection error, confusing user
+    - **Scenario**: Browse remote folder, connection drops, title shows old folder path briefly
+    - **Fix Required**: Minor - just update title_label refresh after path reset
 
-**Files Changed**: `src/repositories/file_monitor_repository.py`
+13. **Monitor Thread Stop Signal Race** (LOW IMPACT)
+    - **Location**: [src/controllers/monitor_thread.py](src/controllers/monitor_thread.py#L100)
+    - **Issue**: `stop()` sets `self._running = False` but main loop checks it with 0.5s queue timeout. If file processing takes >0.5s, shutdown delay is added
+    - **Symptom**: App shutdown takes extra 0.5s+ if processing large file
+    - **Scenario**: Stop called during file processing, must wait for current item to finish then timeout loop
+    - **Fix Required**: Add Event-based signaling instead of boolean flag for immediate responsiveness
 
-### Incorrect Configuration Key in Documentation
-
-**Issue**: The configuration examples in README.md and docs/README.md used `pi_username` as the key, but the actual application settings use `pi_user` (as defined in SettingsConfig). Users following the documentation would create configs that wouldn't populate the username field correctly.
-
-**Fix**: Updated all configuration examples to use the correct key `pi_user` to match the actual config schema.
-
-**Files Changed**: `README.md`, `docs/README.md`
-
-### Duplicate Connect Button Signal Connection
-
-**Issue**: The `connect_btn.clicked` signal was connected to `controller.connect()` in both `_setup_toolbar()` and `_setup_connections()`. This caused clicking Connect to call the connection method twice, leading to duplicate connection attempts and potentially confusing UI states.
-
-**Fix**: Removed the duplicate connection from `_setup_toolbar()`, keeping only the one in `_setup_connections()` where all signal wiring is centralized.
-
-**Files Changed**: `src/components/main_window.py`
-
-### Local Explorer Refresh After Auto Transfer
-
-**Issue**: The `_on_auto_transfer_completed()` method checked for `self.view.local_explorer`, but MainWindow exposes the local explorer as `watch_explorer`. This caused the local file view to not refresh after automatic transfers, showing stale file listings.
-
-**Fix**: Updated the method to reference the correct attribute `watch_explorer`.
-
-**Files Changed**: `src/controllers/main_window_controller.py`
-
-### Transfer Retry Logic (CRITICAL)
-
-**Issue**: When `transfer_tv_folder()` or `transfer_movie_folder()` returned False (indicating failure), files were removed from stability tracking with no retry mechanism. Transient failures (network hiccups, temporary disk issues) would permanently lose files without user notification beyond log entries.
-
-**Fix**: Implemented automatic retry with backoff:
-
-- Failed transfers are re-queued up to 3 times
-- Retry count tracked per file/folder path
-- Clear error messages showing retry attempts (e.g., "retry 2/3")
-- After max retries, permanent failure is logged
-- Successful transfers clear retry counters
-
-**Files Changed**: `src/repositories/file_monitor_repository.py`
-
-### Thread Safety Issue with SFTP Operations (CRITICAL)
-
-**Issue**: The stability polling thread (`_poll_files()`) invoked callbacks directly from a background thread, while watchdog's Observer thread also called file/folder handlers. Both threads accessed the same Paramiko SFTPClient instance, which is not thread-safe. This caused intermittent transfer failures, connection corruption, and race conditions.
-
-**Fix**: Implemented queue-based architecture where all stable file/folder paths are enqueued by background threads and processed sequentially by MonitorThread's main loop. All SFTP operations now happen on a single thread, eliminating race conditions.
-
-**Files Changed**: `src/repositories/file_monitor_repository.py`, `src/controllers/monitor_thread.py`
-
-### File Stability Tracking
-
-**Issue**: When dragging a complete file into the Local Files explorer, the monitor would detect it but not transfer it because it relied on `on_modified` events that never occurred for already-complete files.
-
-**Fix**: Implemented a background polling thread that checks tracked files every 0.5 seconds, ensuring files are transferred after 2 seconds of stability regardless of modification events.
-
-**Files Changed**: `src/repositories/file_monitor_repository.py`, `src/controllers/monitor_thread.py`
-
-### Auto-Connect After Server Selection
-
-**Issue**: After selecting a server in the server selection dialog, users had to manually click "Connect" and "Start Monitoring" buttons.
-
-**Fix**: Added automatic connection and monitoring start after the main window loads, triggered 200ms after the window is fully initialized.
-
-**Files Changed**: `src/components/main_window.py`
-
-### Local Explorer Refresh
-
-**Issue**: Local Files explorer didn't refresh after automatic transfers completed, showing stale file listings.
-
-**Fix**: Added `transfer_completed` signal that propagates from FileMonitorRepository → MonitorThread → AutoSyncController → MainWindowController, triggering explorer refresh.
-
-**Files Changed**: Multiple files in signal chain
-
-### Server Selection Dialog Centering
-
-**Issue**: Server selection dialog wasn't centered on screen when shown during startup.
-
-**Fix**: Added `_center_on_screen()` method that centers the dialog using Qt's screen geometry.
-
-**Files Changed**: `src/components/server_selection_dialog.py`
+14. **Transfer Cancellation Not Implemented** (LOW IMPACT)
+    - **Location**: [src/application/manual_transfer_controller.py](src/application/manual_transfer_controller.py#L183-L188)
+    - **Issue**: `cancel_transfer()` always returns False with TODO comment, cancellation just logs warning
+    - **Symptom**: Users cannot cancel ongoing transfers
+    - **Scenario**: User starts large file transfer, realizes mistake, no way to stop it
+    - **Fix Required**: Implement SFTP transfer cancellation mechanism, or at least doc why it's not supported
 
 ## 🔍 Known Limitations
 
@@ -213,5 +202,5 @@ ssh pi@192.168.1.100 "df -h"
 
 ---
 
-**Last Updated**: March 10, 2026  
+**Last Updated**: March 11, 2026  
 **Status**: ✅ No critical bugs
