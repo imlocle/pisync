@@ -51,11 +51,12 @@ class MainWindow(QWidget):
         # === 1. Load Settings ===
         self.settings = Settings()
         
-        # Check if we need to show server selection
-        if not self._should_show_server_selection():
-            # Validate settings for backward compatibility
-            if not self._validate_settings():
-                return
+        # Check if we need to show server selection / perform initial server setup
+        self._should_show_server_selection()
+
+        # Validate settings for backward compatibility and required fields
+        if not self._validate_settings():
+            return
         
         # Create controller
         self.connection_manager_service = ConnectionManagerService(self.settings)
