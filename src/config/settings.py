@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from src.models.errors import (
     ConfigurationLoadError,
@@ -21,46 +21,59 @@ from src.utils.logging_signal import logger
 class SettingsConfig(BaseModel):
     """
     Application configuration model.
-    
+
     Simplified structure with three main sections:
     1. Connection settings (SSH/SFTP)
     2. Path settings (local and remote directories)
     3. Sync behavior settings
     """
-    
+
     # Multi-server support
-    servers: dict[str, dict] = {}  # server_id -> server config
+    servers: dict[str, dict] = Field(default_factory=dict)  # server_id -> server config
     current_server_id: str = ""  # Currently selected server
-    
+
     # Connection Settings (for backward compatibility)
     pi_user: str = ""
     pi_ip: str = ""
     ssh_key_path: str = os.path.expanduser("~/.ssh/id_rsa")
     ssh_port: int = 22
-    
+
     # Path Settings (simplified - just mirror structure)
     local_watch_dir: str = os.path.expanduser("~/Transfers")
     remote_base_dir: str = "/mnt/external"
-    
+
     # Sync Behavior Settings
     auto_start_monitor: bool = False  # Changed default to False - don't auto-connect
     delete_after_transfer: bool = True
-    file_extensions: set[str] = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".srt", ".nfo"}
-    skip_patterns: set[str] = {".DS_Store", "Thumbs.db", ".Trashes", "._*"}
+    file_extensions: set[str] = Field(
+        default_factory=lambda: {
+            ".mp4",
+            ".mkv",
+            ".avi",
+            ".mov",
+            ".webm",
+            ".flv",
+            ".srt",
+            ".nfo",
+        }
+    )
+    skip_patterns: set[str] = Field(
+        default_factory=lambda: {".DS_Store", "Thumbs.db", ".Trashes", "._*"}
+    )
     stability_duration: float = 2.0  # seconds to wait for file stability
-    
+
     # Metadata
     last_modified: str = ""
-    
+
     # Legacy fields for backward compatibility (will be migrated)
     pi_root_dir: str = ""  # Deprecated: use remote_base_dir
-    pi_movies: str = ""    # Deprecated: no longer needed
-    pi_tv: str = ""        # Deprecated: no longer needed
-    watch_dir: str = ""    # Deprecated: use local_watch_dir
+    pi_movies: str = ""  # Deprecated: no longer needed
+    pi_tv: str = ""  # Deprecated: no longer needed
+    watch_dir: str = ""  # Deprecated: use local_watch_dir
     file_exts: set[str] = set()  # Deprecated: use file_extensions
     skip_files: set[str] = set()  # Deprecated: use skip_patterns
 
-    @field_validator('pi_ip')
+    @field_validator("pi_ip")
     @classmethod
     def validate_ip_address(cls, v: str) -> str:
         """Validate IP address format if not empty."""
@@ -70,11 +83,11 @@ class SettingsConfig(BaseModel):
             except ValueError:
                 raise IPAddressValidationError(
                     f"Invalid IP address format: {v}",
-                    details="Please enter a valid IPv4 or IPv6 address"
+                    details="Please enter a valid IPv4 or IPv6 address",
                 )
         return v
 
-    @field_validator('ssh_key_path')
+    @field_validator("ssh_key_path")
     @classmethod
     def validate_ssh_key(cls, v: str) -> str:
         """Validate SSH key path if not empty."""
@@ -86,11 +99,11 @@ class SettingsConfig(BaseModel):
             elif not os.path.isfile(expanded_path):
                 raise SSHKeyValidationError(
                     f"SSH key path is not a file: {expanded_path}",
-                    details="Please provide a path to a valid SSH private key file"
+                    details="Please provide a path to a valid SSH private key file",
                 )
         return v
 
-    @field_validator('local_watch_dir')
+    @field_validator("local_watch_dir")
     @classmethod
     def validate_watch_dir(cls, v: str) -> str:
         """Validate watch directory path."""
@@ -101,42 +114,41 @@ class SettingsConfig(BaseModel):
                 os.makedirs(expanded_path, exist_ok=True)
             except Exception as e:
                 raise PathValidationError(
-                    f"Cannot create watch directory: {expanded_path}",
-                    details=str(e)
+                    f"Cannot create watch directory: {expanded_path}", details=str(e)
                 )
         return v
 
-    @field_validator('remote_base_dir')
+    @field_validator("remote_base_dir")
     @classmethod
     def validate_remote_base_dir(cls, v: str) -> str:
         """Validate remote base directory format."""
         if v and v.strip():
             # Ensure it starts with / for absolute path
-            if not v.strip().startswith('/'):
+            if not v.strip().startswith("/"):
                 raise PathValidationError(
                     f"Remote base directory must be an absolute path: {v}",
-                    details="Path should start with /"
+                    details="Path should start with /",
                 )
         return v
-    
+
     def model_post_init(self, __context) -> None:
         """
         Migrate legacy settings to new format after initialization.
-        
+
         This ensures backward compatibility with old config files.
         """
         # Migrate watch_dir to local_watch_dir
         if self.watch_dir and not self.local_watch_dir:
             self.local_watch_dir = self.watch_dir
-        
+
         # Migrate pi_root_dir to remote_base_dir
         if self.pi_root_dir and self.pi_root_dir != "/" and not self.remote_base_dir:
             self.remote_base_dir = self.pi_root_dir
-        
+
         # Migrate file_exts to file_extensions
         if self.file_exts and not self.file_extensions:
             self.file_extensions = self.file_exts
-        
+
         # Migrate skip_files to skip_patterns
         if self.skip_files and not self.skip_patterns:
             self.skip_patterns = self.skip_files
@@ -186,11 +198,8 @@ class SettingsConfig(BaseModel):
             return cls(**data)
         except Exception as e:
             raise InvalidConfigurationError(
-                "Failed to parse configuration",
-                details=str(e)
+                "Failed to parse configuration", details=str(e)
             )
-
-
 
 
 class Settings:
@@ -238,64 +247,61 @@ class Settings:
                     logger.info(f"Config: Loaded from {config_path}")
                     return data
             else:
-                logger.warn(
-                    f"Config: File not found: {config_path}, using defaults"
-                )
+                logger.warn(f"Config: File not found: {config_path}, using defaults")
                 return {}
         except json.JSONDecodeError as e:
             logger.error(f"Config: Invalid JSON in {config_path}: {e}")
             raise ConfigurationLoadError(
                 f"Invalid JSON in configuration file",
-                details=f"File: {config_path}, Error: {str(e)}"
+                details=f"File: {config_path}, Error: {str(e)}",
             )
         except PermissionError as e:
             logger.error(f"Config: Permission denied: {config_path}")
             raise ConfigurationLoadError(
                 f"Cannot read configuration file",
-                details=f"Permission denied: {config_path}"
+                details=f"Permission denied: {config_path}",
             )
         except Exception as e:
             logger.error(f"Config: Error loading {config_path}: {e}")
             # Return empty dict for non-critical errors
             return {}
 
-
     # New simplified properties
     @property
     def local_watch_dir(self):
         """Local watch directory (replaces watch_dir)"""
         return self.config.local_watch_dir
-    
+
     @property
     def remote_base_dir(self):
         """Remote base directory (replaces pi_root_dir)"""
         return self.config.remote_base_dir
-    
+
     @property
     def file_extensions(self):
         """Allowed file extensions (replaces file_exts)"""
         return self.config.file_extensions
-    
+
     @property
     def skip_patterns(self):
         """Skip patterns (replaces skip_files)"""
         return self.config.skip_patterns
-    
+
     @property
     def delete_after_transfer(self):
         """Whether to delete local files after transfer"""
         return self.config.delete_after_transfer
-    
+
     @property
     def stability_duration(self):
         """File stability duration in seconds"""
         return self.config.stability_duration
-    
+
     @property
     def ssh_port(self):
         """SSH port number"""
         return self.config.ssh_port
-    
+
     # Legacy properties for backward compatibility
     @property
     def pi_user(self):
@@ -364,21 +370,22 @@ class Settings:
             save_dir.mkdir(exist_ok=True)
         except Exception as e:
             raise ConfigurationSaveError(
-                f"Cannot create config directory: {save_dir}",
-                details=str(e)
+                f"Cannot create config directory: {save_dir}", details=str(e)
             )
 
         config_path = save_dir / CONFIG_JSON
 
         # Convert sets back to lists for JSON serialization
         save_data = config_data.copy()
-        
+
         # Handle new field names
-        if "file_extensions" in save_data and isinstance(save_data["file_extensions"], set):
+        if "file_extensions" in save_data and isinstance(
+            save_data["file_extensions"], set
+        ):
             save_data["file_extensions"] = list(save_data["file_extensions"])
         if "skip_patterns" in save_data and isinstance(save_data["skip_patterns"], set):
             save_data["skip_patterns"] = list(save_data["skip_patterns"])
-        
+
         # Handle legacy field names
         if "file_exts" in save_data and isinstance(save_data["file_exts"], set):
             save_data["file_exts"] = list(save_data["file_exts"])
@@ -391,20 +398,18 @@ class Settings:
             logger.success(f"Config: Saved to {config_path}")
         except PermissionError as e:
             raise ConfigurationSaveError(
-                f"Permission denied writing config",
-                details=f"Path: {config_path}"
+                f"Permission denied writing config", details=f"Path: {config_path}"
             )
         except Exception as e:
             raise ConfigurationSaveError(
                 f"Failed to save configuration",
-                details=f"Path: {config_path}, Error: {str(e)}"
+                details=f"Path: {config_path}, Error: {str(e)}",
             )
-
 
     def is_valid(self) -> bool:
         """
         Check if critical settings are configured.
-        
+
         Returns:
             True if all required settings are present
         """
@@ -420,7 +425,7 @@ class Settings:
     def get_servers(self) -> dict[str, dict]:
         """
         Get all saved servers.
-        
+
         Returns:
             Dictionary of server_id -> server config
         """
@@ -429,10 +434,10 @@ class Settings:
     def get_server(self, server_id: str) -> dict | None:
         """
         Get a specific server configuration.
-        
+
         Args:
             server_id: Server identifier
-            
+
         Returns:
             Server configuration dict or None if not found
         """
@@ -441,13 +446,13 @@ class Settings:
     def add_server(self, server_id: str, server_config: dict) -> None:
         """
         Add or update a server configuration.
-        
+
         Args:
             server_id: Unique server identifier
             server_config: Server configuration dictionary
         """
         self.config.servers[server_id] = server_config
-        
+
         # Save to disk
         config_data = self._config_to_dict()
         self.save_config(config_data)
@@ -455,17 +460,17 @@ class Settings:
     def delete_server(self, server_id: str) -> None:
         """
         Delete a server configuration.
-        
+
         Args:
             server_id: Server identifier to delete
         """
         if server_id in self.config.servers:
             del self.config.servers[server_id]
-            
+
             # If this was the current server, clear it
             if self.config.current_server_id == server_id:
                 self.config.current_server_id = ""
-            
+
             # Save to disk
             config_data = self._config_to_dict()
             self.save_config(config_data)
@@ -473,10 +478,10 @@ class Settings:
     def load_server(self, server_id: str) -> bool:
         """
         Load a server configuration as the current active server.
-        
+
         Args:
             server_id: Server identifier to load
-            
+
         Returns:
             True if server was loaded successfully, False otherwise
         """
@@ -484,22 +489,26 @@ class Settings:
         if not server_config:
             logger.error(f"Settings: Server not found: {server_id}")
             return False
-        
+
         # Update current connection settings
         self.config.pi_user = server_config.get("pi_user", "")
         self.config.pi_ip = server_config.get("pi_ip", "")
-        self.config.ssh_key_path = server_config.get("ssh_key_path", os.path.expanduser("~/.ssh/id_rsa"))
+        self.config.ssh_key_path = server_config.get(
+            "ssh_key_path", os.path.expanduser("~/.ssh/id_rsa")
+        )
         self.config.ssh_port = server_config.get("ssh_port", 22)
-        self.config.remote_base_dir = server_config.get("remote_base_dir", "/mnt/external")
+        self.config.remote_base_dir = server_config.get(
+            "remote_base_dir", "/mnt/external"
+        )
         self.config.current_server_id = server_id
-        
+
         logger.info(f"Settings: Loaded server: {server_config.get('name', server_id)}")
         return True
 
     def _config_to_dict(self) -> dict:
         """
         Convert current config to dictionary for saving.
-        
+
         Returns:
             Configuration dictionary
         """
