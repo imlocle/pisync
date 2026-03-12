@@ -44,10 +44,20 @@ class MainWindow(QWidget):
         self.setWindowTitle(SOFTWARE_NAME)
         self.setMinimumSize(1200, 800)
 
+        # Connection retry tracking
+        self.connection_attempts = 0
+        self.max_connection_attempts = 3
+
         # === 1. Load Settings ===
+        self.settings = Settings()
+        
+        # Check if we need to show server selection / perform initial server setup
+        self._should_show_server_selection()
+
+        # Validate settings for backward compatibility and required fields
         if not self._validate_settings():
             return
-
+        
         # Create controller
         self.connection_manager_service = ConnectionManagerService(self.settings)
         self.controller = MainWindowController(
@@ -83,10 +93,102 @@ class MainWindow(QWidget):
     def _emit_fully_loaded(self):
         """Emit signal that window is fully loaded and ready."""
         self.fully_loaded.emit()
+        
+        # Auto-connect after window is loaded
+        QTimer.singleShot(200, self._auto_connect_and_start)
+    
+    def _auto_connect_and_start(self):
+        """Automatically connect and start monitoring after window loads (if enabled in settings)."""
+        # Only auto-connect if auto_start_monitor is enabled
+        if not self.settings.auto_start_monitor:
+            logger.info("Auto-connect disabled in settings")
+            return
+        
+        # Connect to the server
+        self.controller.connect()
+        
+        # Start monitoring after successful connection
+        if self.connection_manager_service.is_connected():
+            self.controller.start_monitor()
+    
+    def _should_show_server_selection(self) -> bool:
+        """
+        Check if we should show server selection dialog.
+        
+        Returns:
+            True if server selection should be shown
+        """
+        servers = self.settings.get_servers()
+        
+        # If no servers configured, show settings to add first server
+        if not servers:
+            return self._show_initial_setup()
+        
+        # If servers exist, show selection dialog
+        return self._show_server_selection()
+    
+    def _show_initial_setup(self) -> bool:
+        """
+        Show initial setup for new users.
+        
+        Returns:
+            True if setup completed, False if cancelled
+        """
+        QMessageBox.information(
+            self,
+            "Welcome to PiSync",
+            "Welcome! Let's set up your first Raspberry Pi server.",
+            QMessageBox.StandardButton.Ok,
+        )
+        
+        settings_window = SettingsWindow(self.settings, server_mode=True)
+        if settings_window.exec() != QDialog.DialogCode.Accepted:
+            QMessageBox.critical(
+                self,
+                "Setup Required",
+                "At least one server must be configured to use PiSync.",
+                QMessageBox.StandardButton.Ok,
+            )
+            self.close()
+            return False
+        
+        # After adding first server, show selection
+        return self._show_server_selection()
+    
+    def _show_server_selection(self) -> bool:
+        """
+        Show server selection dialog.
+        
+        Returns:
+            True if server selected, False if cancelled
+        """
+        from src.components.server_selection_dialog import ServerSelectionDialog
+        
+        selection_dialog = ServerSelectionDialog(self)
+        if selection_dialog.exec() != QDialog.DialogCode.Accepted:
+            self.close()
+            return False
+        
+        server_id = selection_dialog.get_selected_server_id()
+        if not server_id:
+            self.close()
+            return False
+        
+        # Load the selected server
+        if not self.settings.load_server(server_id):
+            QMessageBox.critical(
+                self,
+                "Server Load Failed",
+                "Failed to load the selected server configuration.",
+                QMessageBox.StandardButton.Ok,
+            )
+            self.close()
+            return False
+        
+        return True
     
     def _validate_settings(self) -> bool:
-        self.settings = Settings()
-
+        """Validate settings for backward compatibility with old configs."""
         if not self.settings.is_valid():
             QMessageBox.warning(
                 self,
@@ -110,15 +212,66 @@ class MainWindow(QWidget):
                 return False
 
         return True
+    
+    def handle_connection_failure(self):
+        """Handle connection failure with retry logic."""
+        self.connection_attempts += 1
+        
+        if self.connection_attempts >= self.max_connection_attempts:
+            logger.error(f"Connection failed after {self.max_connection_attempts} attempts")
+            
+            reply = QMessageBox.question(
+                self,
+                "Connection Failed",
+                f"Failed to connect after {self.max_connection_attempts} attempts.\n\n"
+                "Would you like to select a different server?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # Reset attempts and show server selection
+                self.connection_attempts = 0
+                if self._show_server_selection():
+                    # Reconnect with new server
+                    self.controller.connect()
+            else:
+                # User chose not to select different server
+                logger.info("User cancelled server selection")
+        else:
+            logger.warn(f"Connection attempt {self.connection_attempts}/{self.max_connection_attempts} failed")
+    
+    def change_server(self):
+        """Allow user to change to a different server."""
+        # Stop monitoring if active
+        if self.controller.auto_sync.is_monitoring():
+            self.controller.stop_monitor()
+        
+        # Disconnect current connection
+        self.connection_manager_service.disconnect()
+        
+        # Reset connection attempts
+        self.connection_attempts = 0
+        
+        # Show server selection
+        if self._show_server_selection():
+            # Update connection manager with new settings
+            self.connection_manager_service = ConnectionManagerService(self.settings)
+            self.controller.connection_manager = self.connection_manager_service
+            
+            # Connect to new server
+            self.controller.connect()
 
     # ------------------------------------------------------------------
     # Signal Wiring
     # ------------------------------------------------------------------
     def _setup_connections(self) -> None:
         """Wire UI signals to controller actions."""
+        self.connect_btn.clicked.connect(self.controller.connect)
         self.start_btn.clicked.connect(self.controller.start_monitor)
         self.stop_btn.clicked.connect(self.controller.stop_monitor)
         self.upload_all_btn.clicked.connect(self.controller.upload_all)
+        self.change_server_btn.clicked.connect(self.change_server)
         self.refresh_btn.clicked.connect(self.controller.refresh_explorers)
         self.settings_btn.clicked.connect(self.controller.open_settings)
         self.delete_btn.clicked.connect(self.controller.delete_selected_item)
@@ -160,9 +313,14 @@ class MainWindow(QWidget):
         toolbar_layout.setContentsMargins(12, 8, 12, 8)
         toolbar_layout.setSpacing(8)
 
+        # Connect button
+        self.connect_btn = QPushButton("🔌 Connect")
+        self.connect_btn.setObjectName("primary_btn")
+        self.connect_btn.setMinimumHeight(36)
+        self.connect_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
         # Start button
         self.start_btn = QPushButton("▶  Start Monitoring")
-        self.start_btn.setObjectName("primary_btn")
         self.start_btn.setMinimumHeight(36)
         self.start_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
@@ -179,12 +337,18 @@ class MainWindow(QWidget):
         self.upload_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Spacer
+        toolbar_layout.addWidget(self.connect_btn)
         toolbar_layout.addWidget(self.start_btn)
         toolbar_layout.addWidget(self.stop_btn)
         toolbar_layout.addWidget(self.upload_all_btn)
         toolbar_layout.addStretch()
 
         # Right side buttons
+        self.change_server_btn = QPushButton("🔄 Change Server")
+        self.change_server_btn.setMinimumHeight(36)
+        self.change_server_btn.setToolTip("Select a different server")
+        self.change_server_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        
         self.refresh_btn = QPushButton("↻")
         self.refresh_btn.setObjectName("icon_btn")
         self.refresh_btn.setToolTip("Refresh Explorers")
@@ -201,6 +365,7 @@ class MainWindow(QWidget):
         self.settings_btn.setToolTip("Settings")
         self.settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
+        toolbar_layout.addWidget(self.change_server_btn)
         toolbar_layout.addWidget(self.refresh_btn)
         toolbar_layout.addWidget(self.delete_btn)
         toolbar_layout.addWidget(self.settings_btn)
@@ -339,10 +504,11 @@ class MainWindow(QWidget):
     # Lifecycle Events
     # ------------------------------------------------------------------
     def showEvent(self, event: QShowEvent):
+        """Called when window is shown."""
         super().showEvent(event)
-        QTimer.singleShot(150, self.controller.connect)
-        if self.settings.auto_start_monitor:
-            QTimer.singleShot(300, self.controller.start_monitor)
+        # This handler itself does not force a connection; the user can connect
+        # or start monitoring manually, and auto-connect/auto-start may still
+        # occur elsewhere based on user settings.
 
     def closeEvent(self, event: QCloseEvent):
         """Called when user clicks the window's close button."""

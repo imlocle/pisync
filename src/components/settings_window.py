@@ -8,6 +8,7 @@ Organized into logical sections:
 - Files: Extensions and skip patterns
 """
 
+import os
 from datetime import datetime
 
 from PySide6.QtCore import Qt
@@ -45,12 +46,22 @@ from src.models.errors import (
 class SettingsWindow(QDialog):
     """Modern settings dialog with tabbed interface."""
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, server_mode: bool = False, server_id: str | None = None):
         super().__init__()
         self.setWindowTitle(f"{SOFTWARE_NAME} - Settings")
         self.setMinimumSize(600, 700)
 
         self.settings = settings
+        self.server_mode = server_mode  # If True, we're adding/editing a server
+        self.server_id = server_id  # If editing, this is the server ID
+        self.server_config = {}  # Current server config being edited
+        
+        # If editing a server, load its config
+        if server_mode and server_id:
+            self.server_config = settings.get_server(server_id) or {}
+        
+        # If in server mode, show server name field
+        self.server_name_input = None
 
         # Main layout
         main_layout = QVBoxLayout(self)
@@ -66,16 +77,20 @@ class SettingsWindow(QDialog):
         
         self._setup_connection_tab()
         self._setup_paths_tab()
-        self._setup_behavior_tab()
-        self._setup_files_tab()
+        
+        # Only show behavior and files tabs if not in server mode
+        if not server_mode:
+            self._setup_behavior_tab()
+            self._setup_files_tab()
 
         main_layout.addWidget(self.tab_widget, stretch=1)
 
         # Footer with buttons
         self._setup_footer(main_layout)
 
-        # Test connection on load
-        self.test_connection()
+        # Test connection on load (only if not in server mode or editing existing)
+        if not server_mode or server_id:
+            self.test_connection()
 
     def _setup_header(self, layout: QVBoxLayout) -> None:
         """Create header with title and connection status."""
@@ -118,22 +133,48 @@ class SettingsWindow(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
 
+        # Server name (only in server mode)
+        if self.server_mode:
+            name_group = QGroupBox("Server Name")
+            name_layout = QFormLayout()
+            name_layout.setSpacing(12)
+            name_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+            self.server_name_input = QLineEdit(self.server_config.get("name", ""))
+            self.server_name_input.setPlaceholderText("e.g., Living Room Pi")
+
+            name_layout.addRow("Name:", self.server_name_input)
+            name_group.setLayout(name_layout)
+            layout.addWidget(name_group)
+
         # SSH Connection group
         ssh_group = QGroupBox("SSH Connection")
         ssh_layout = QFormLayout()
         ssh_layout.setSpacing(12)
         ssh_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.pi_user_input = QLineEdit(self.settings.pi_user)
+        # Get values from server config if in server mode, otherwise from settings
+        if self.server_mode:
+            pi_user = self.server_config.get("pi_user", "")
+            pi_ip = self.server_config.get("pi_ip", "")
+            ssh_port = self.server_config.get("ssh_port", 22)
+            ssh_key = self.server_config.get("ssh_key_path", os.path.expanduser("~/.ssh/id_rsa"))
+        else:
+            pi_user = self.settings.pi_user
+            pi_ip = self.settings.pi_ip
+            ssh_port = self.settings.ssh_port
+            ssh_key = self.settings.ssh_key_path
+
+        self.pi_user_input = QLineEdit(pi_user)
         self.pi_user_input.setPlaceholderText("e.g., pi")
         
-        self.pi_ip_input = QLineEdit(self.settings.pi_ip)
+        self.pi_ip_input = QLineEdit(pi_ip)
         self.pi_ip_input.setPlaceholderText("e.g., 192.168.1.100")
         
-        self.ssh_port_input = QLineEdit(str(self.settings.ssh_port))
+        self.ssh_port_input = QLineEdit(str(ssh_port))
         self.ssh_port_input.setPlaceholderText("22")
         
-        self.ssh_key_path = QLineEdit(self.settings.ssh_key_path)
+        self.ssh_key_path = QLineEdit(ssh_key)
         self.ssh_key_path.setPlaceholderText("e.g., ~/.ssh/id_rsa")
 
         ssh_layout.addRow("Username:", self.pi_user_input)
@@ -161,18 +202,19 @@ class SettingsWindow(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
 
-        # Local paths group
-        local_group = QGroupBox("Local Paths")
-        local_layout = QFormLayout()
-        local_layout.setSpacing(12)
-        local_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        # Local paths group (only if not in server mode)
+        if not self.server_mode:
+            local_group = QGroupBox("Local Paths")
+            local_layout = QFormLayout()
+            local_layout.setSpacing(12)
+            local_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.local_watch_dir_input = QLineEdit(self.settings.local_watch_dir)
-        self.local_watch_dir_input.setPlaceholderText("e.g., ~/Transfers")
+            self.local_watch_dir_input = QLineEdit(self.settings.local_watch_dir)
+            self.local_watch_dir_input.setPlaceholderText("e.g., ~/Transfers")
 
-        local_layout.addRow("Watch Directory:", self.local_watch_dir_input)
-        local_group.setLayout(local_layout)
-        layout.addWidget(local_group)
+            local_layout.addRow("Watch Directory:", self.local_watch_dir_input)
+            local_group.setLayout(local_layout)
+            layout.addWidget(local_group)
 
         # Remote paths group
         remote_group = QGroupBox("Remote Paths")
@@ -180,7 +222,13 @@ class SettingsWindow(QDialog):
         remote_layout.setSpacing(12)
         remote_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.remote_base_dir_input = QLineEdit(self.settings.remote_base_dir)
+        # Get value from server config if in server mode, otherwise from settings
+        if self.server_mode:
+            remote_base = self.server_config.get("remote_base_dir", "/mnt/external")
+        else:
+            remote_base = self.settings.remote_base_dir
+
+        self.remote_base_dir_input = QLineEdit(remote_base)
         self.remote_base_dir_input.setPlaceholderText("e.g., /mnt/external")
 
         remote_layout.addRow("Base Directory:", self.remote_base_dir_input)
@@ -213,7 +261,7 @@ class SettingsWindow(QDialog):
 
         self.auto_start_monitor_checkbox = QCheckBox()
         self.auto_start_monitor_checkbox.setChecked(
-            getattr(self.settings, "auto_start_monitor", True)
+            getattr(self.settings, "auto_start_monitor", False)
         )
 
         self.stability_duration_input = QLineEdit(str(self.settings.stability_duration))
@@ -353,6 +401,103 @@ class SettingsWindow(QDialog):
 
     def save_settings(self):
         """Collect UI values, validate, and save configuration."""
+        if self.server_mode:
+            # Save as a server configuration
+            self._save_server_config()
+        else:
+            # Save as global settings
+            self._save_global_settings()
+
+    def _save_server_config(self):
+        """Save server configuration."""
+        import uuid
+        
+        # Generate server ID if new
+        if not self.server_id:
+            self.server_id = str(uuid.uuid4())[:8]
+        
+        server_name = self.server_name_input.text().strip() if self.server_name_input else f"Server {self.server_id}"
+        
+        if not server_name:
+            QMessageBox.warning(
+                self,
+                "Missing Server Name",
+                "Please enter a name for this server.",
+                QMessageBox.StandardButton.Ok
+            )
+            return
+        
+        server_config = {
+            "name": server_name,
+            "pi_user": self.pi_user_input.text().strip(),
+            "pi_ip": self.pi_ip_input.text().strip(),
+            "ssh_key_path": self.ssh_key_path.text().strip(),
+            "ssh_port": int(self.ssh_port_input.text().strip() or "22"),
+            "remote_base_dir": self.remote_base_dir_input.text().rstrip("/").strip(),
+        }
+        
+        try:
+            # Validate the configuration
+            temp_config = {
+                **server_config,
+                "local_watch_dir": self.settings.local_watch_dir,
+                "file_extensions": list(self.settings.file_extensions),
+                "skip_patterns": list(self.settings.skip_patterns),
+            }
+            SettingsConfig.from_json(temp_config)
+            
+            # Save the server
+            self.settings.add_server(self.server_id, server_config)
+            
+            logger.success(f"Server '{server_name}' saved successfully")
+            QMessageBox.information(
+                self,
+                "Server Saved",
+                f"Server '{server_name}' has been saved successfully.",
+                QMessageBox.StandardButton.Ok
+            )
+            self.accept()
+            
+        except IPAddressValidationError as e:
+            QMessageBox.warning(
+                self,
+                "Invalid IP Address",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+            self.tab_widget.setCurrentIndex(0)
+            self.pi_ip_input.setFocus()
+            
+        except SSHKeyValidationError as e:
+            QMessageBox.warning(
+                self,
+                "Invalid SSH Key",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+            self.tab_widget.setCurrentIndex(0)
+            self.ssh_key_path.setFocus()
+            
+        except PathValidationError as e:
+            QMessageBox.warning(
+                self,
+                "Invalid Path",
+                f"{e.message}\n\n{e.details if e.details else ''}",
+                QMessageBox.StandardButton.Ok
+            )
+            self.tab_widget.setCurrentIndex(1)
+            
+        except Exception as e:
+            logger.error(f"Settings: Unexpected error: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An unexpected error occurred while saving server:\n{str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+
+    def _save_global_settings(self):
+        """Save global application settings."""
         config_data = {
             "pi_user": self.pi_user_input.text().strip(),
             "pi_ip": self.pi_ip_input.text().strip(),
@@ -456,7 +601,39 @@ class SettingsWindow(QDialog):
         self.connection_status_label.setText("● Testing connection...")
         self.connection_status_label.setStyleSheet("color: #ce9178; font-weight: 500;")
         
-        connection_manager_service = ConnectionManagerService(self.settings)
+        # Create temporary settings for testing
+        if self.server_mode:
+            # Use values from the form - create a lightweight settings-like object
+            # to avoid mutating the singleton Settings
+            from src.config.settings import SettingsConfig
+            
+            class TempSettings:
+                """Temporary settings object for connection testing without mutating singleton."""
+                def __init__(self, config: SettingsConfig):
+                    self.config = config
+                    self.pi_user = config.pi_user
+                    self.pi_ip = config.pi_ip
+                    self.ssh_key_path = config.ssh_key_path
+                    self.ssh_port = config.ssh_port
+            
+            temp_config_data = {
+                "pi_user": self.pi_user_input.text().strip(),
+                "pi_ip": self.pi_ip_input.text().strip(),
+                "ssh_key_path": self.ssh_key_path.text().strip(),
+                "ssh_port": int(self.ssh_port_input.text().strip() or "22"),
+                "remote_base_dir": self.remote_base_dir_input.text().strip() or "/mnt/external",
+                "local_watch_dir": self.settings.local_watch_dir,
+            }
+            try:
+                temp_config = SettingsConfig.from_json(temp_config_data)
+                temp_settings = TempSettings(temp_config)
+                connection_manager_service = ConnectionManagerService(temp_settings)
+            except Exception as e:
+                self.connection_status_label.setText("● Invalid configuration")
+                self.connection_status_label.setStyleSheet("color: #f48771; font-weight: 500;")
+                return
+        else:
+            connection_manager_service = ConnectionManagerService(self.settings)
 
         if connection_manager_service.test_connection():
             self.connection_status_label.setText("● Connected successfully")

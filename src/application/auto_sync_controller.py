@@ -93,6 +93,7 @@ class AutoSyncController(QObject):
             
             # Connect monitor thread signals
             self._monitor_thread.scan_progress.connect(self.scan_progress.emit)
+            self._monitor_thread.transfer_completed.connect(self.file_transferred.emit)
             
             self._monitor_thread.start()
             self._is_monitoring = True
