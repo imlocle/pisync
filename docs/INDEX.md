@@ -17,8 +17,8 @@ Welcome to PiSync Documentation! Here's how to navigate all available docs.
 | Manage and update dependencies    | [DEPENDENCY_MANAGEMENT.md](DEPENDENCY_MANAGEMENT.md)     | 15 min    |
 | Make my code production-ready     | [PRODUCTION_STANDARDS.md](PRODUCTION_STANDARDS.md)       | 30 min    |
 | Get production setup templates    | [QUICKSTART_PRODUCTION.md](QUICKSTART_PRODUCTION.md)     | 2-4 hours |
-| See known bugs and limitations    | [BUGS.md](BUGS.md)                                       | 5 min     |
-| Check future feature ideas        | [IDEAS.md](IDEAS.md)                                     | 10 min    |
+| See known bugs and limitations    | [BUGS.md](BUGS.md)                                       | 10 min    |
+| Check future feature ideas        | [ROADMAP.md](ROADMAP.md)                                 | 15 min    |
 | Troubleshoot an issue             | [BUGS.md](BUGS.md) then [DEVELOPMENT.md](DEVELOPMENT.md) | varies    |
 
 ---
@@ -28,13 +28,13 @@ Welcome to PiSync Documentation! Here's how to navigate all available docs.
 ### For Users
 
 - **[../README.md](../README.md)** - What is PiSync? Features, installation, usage
-- **[IDEAS.md](IDEAS.md)** - Future features and improvements planned
+- **[ROADMAP.md](ROADMAP.md)** - Future features, improvements, planned releases
 
 ### For Developers
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design, layers, data flow, threading model
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Setup, workflows, debugging, code standards
-- **[BUGS.md](BUGS.md)** - Known issues, limitations, ranking by severity
+- **[BUGS.md](BUGS.md)** - Known issues, limitations, workarounds, ranked by severity
 
 ### For Packaging & Distribution
 
@@ -55,9 +55,9 @@ Welcome to PiSync Documentation! Here's how to navigate all available docs.
 
 **Just want to use PiSync?**
 
-1. Read [README.md](README.md) - What PiSync does
+1. Read [README.md](../README.md) - What PiSync does
 2. Follow Quick Start section to install
-3. Check [bugs.md](bugs.md) if issues arise
+3. Check [BUGS.md](BUGS.md) if issues arise
 
 ### First-Time Contributors
 
@@ -65,7 +65,7 @@ Welcome to PiSync Documentation! Here's how to navigate all available docs.
 
 1. Read [DEVELOPMENT.md](DEVELOPMENT.md) - Setup and structure
 2. Read [ARCHITECTURE.md](ARCHITECTURE.md) - Understand the design
-3. Pick a task from [bugs.md](bugs.md) or [ideas.md](ideas.md)
+3. Pick a task from [BUGS.md](BUGS.md) or [ROADMAP.md](ROADMAP.md)
 4. Follow development workflow in DEVELOPMENT.md
 
 ### Experienced Developers
@@ -88,11 +88,11 @@ ARCHITECTURE.md ─────────────────────�
 README.md ────────────────────────────────────────┘
 (Overview, features, usage)
 
-bugs.md ──────────────────────────┐
-(Known issues)                    │
+BUGS.md ──────────────────────────┐
+(Known issues, workarounds)       │
                                   ├─→ PRODUCTION_STANDARDS.md
-ideas.md ─────────────────────────┤   (Production checklist)
-(Future features)                 │
+ROADMAP.md ───────────────────────┤   (Production checklist)
+(Future features & improvements)  │
                                   └─→ QUICKSTART_PRODUCTION.md
                                       (Implementation templates)
 ```
@@ -146,7 +146,7 @@ Verify checklist and commit!
 ### Path 4: Bug Fixing (30 minutes)
 
 ```
-bugs.md (Find your bug)
+BUGS.md (Find your bug)
   ↓
 DEVELOPMENT.md (Debugging tips)
   ↓
@@ -161,17 +161,17 @@ Fix and test!
 
 ## 📋 Key Features by Document
 
-| Document                     | Key Sections                                      | Best For                |
-| ---------------------------- | ------------------------------------------------- | ----------------------- |
-| **README.md**                | Features, Quick Start, SSH Setup, Troubleshooting | Users & quick reference |
-| **ARCHITECTURE.md**          | Layers, Components, Data Flow, Diagrams, Patterns | Understanding design    |
-| **DEVELOPMENT.md**           | Setup, Structure, Workflows, Debugging, Standards | Daily development       |
-| **DISTRIBUTION.md**          | Wheel builds, PyPI publishing, CI/CD automation   | Package distribution    |
-| **DEPENDENCY_MANAGEMENT.md** | pip-tools workflow, updates, security patches     | Managing dependencies   |
-| **PRODUCTION_STANDARDS.md**  | 8 major categories, checklist, roadmap            | Production planning     |
-| **QUICKSTART_PRODUCTION.md** | 5 phases, copy-paste templates, Makefile          | Implementation          |
-| **BUGS.md**                  | 14 ranked issues, active bugs, limitations        | Issue tracking          |
-| **IDEAS.md**                 | Roadmap, future features, v1.1+ plans             | Planning                |
+| Document                     | Key Sections                                      | Best For                        |
+| ---------------------------- | ------------------------------------------------- | ------------------------------- |
+| **README.md**                | Features, Quick Start, SSH Setup, Troubleshooting | Users & quick reference         |
+| **ARCHITECTURE.md**          | Layers, Components, Data Flow, Diagrams, Patterns | Understanding design            |
+| **DEVELOPMENT.md**           | Setup, Structure, Workflows, Debugging, Standards | Daily development               |
+| **DISTRIBUTION.md**          | Wheel builds, PyPI publishing, CI/CD automation   | Package distribution            |
+| **DEPENDENCY_MANAGEMENT.md** | pip-tools workflow, updates, security patches     | Managing dependencies           |
+| **PRODUCTION_STANDARDS.md**  | 8 major categories, checklist, roadmap            | Production planning             |
+| **QUICKSTART_PRODUCTION.md** | 5 phases, copy-paste templates, Makefile          | Implementation                  |
+| **BUGS.md**                  | 14+ issues, workarounds, severity ranking        | Issue tracking, troubleshooting |
+| **ROADMAP.md**               | v1.1-v2.0 features, priorities, timelines         | Planning & feature requests     |
 
 ---
 
@@ -183,7 +183,7 @@ Fix and test!
 
 ### Q: How do I report a bug?
 
-**A:** Check [bugs.md](bugs.md) first. If you found a new issue, add it to the "Potential Issues" section with reproduction steps.
+**A:** Check [BUGS.md](BUGS.md) first. If you found a new issue, open a GitHub issue with reproduction steps.
 
 ### Q: Where's the contribution guide?
 
@@ -191,7 +191,7 @@ Fix and test!
 
 ### Q: What's the roadmap?
 
-**A:** See [ideas.md](ideas.md) for planned features and priorities.
+**A:** See [ROADMAP.md](ROADMAP.md) for planned features, versions, and priorities.
 
 ### Q: How do I run tests?
 
