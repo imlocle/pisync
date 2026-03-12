@@ -170,7 +170,7 @@ Fix and test!
 | **DEPENDENCY_MANAGEMENT.md** | pip-tools workflow, updates, security patches     | Managing dependencies           |
 | **PRODUCTION_STANDARDS.md**  | 8 major categories, checklist, roadmap            | Production planning             |
 | **QUICKSTART_PRODUCTION.md** | 5 phases, copy-paste templates, Makefile          | Implementation                  |
-| **BUGS.md**                  | 14+ issues, workarounds, severity ranking        | Issue tracking, troubleshooting |
+| **BUGS.md**                  | 14+ issues, workarounds, severity ranking         | Issue tracking, troubleshooting |
 | **ROADMAP.md**               | v1.1-v2.0 features, priorities, timelines         | Planning & feature requests     |
 
 ---
